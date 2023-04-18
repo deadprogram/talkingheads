@@ -17,7 +17,7 @@ var version = "dev"
 
 var (
 	sp   serial.Port
-	lang string
+	lang, assistant, human string
 )
 
 func main() {
@@ -59,6 +59,18 @@ func RunCLI(version string) error {
 				Value:   "",
 				Aliases: []string{"p"},
 			},
+			&cli.StringFlag{
+				Name:    "assistant",
+				Usage:   "name of assistant",
+				Value:   "Assistant",
+				Aliases: []string{"a"},
+			},
+			&cli.StringFlag{
+				Name:    "human",
+				Usage:   "name of human",
+				Value:   "Human",
+				Aliases: []string{"hu"},
+			},
 		},
 		Before: func(c *cli.Context) error {
 			if c.NArg() == 0 && !isPiped() {
@@ -73,6 +85,9 @@ func RunCLI(version string) error {
 			voice := c.String("voice")
 			keys := c.String("keys")
 			port := c.String("port")
+			assistant = c.String("assistant")
+			human = c.String("human")
+
 			if len(port) > 0 {
 				// open serial port
 				sp, _ = serial.Open(port, &serial.Mode{BaudRate: 115200})
@@ -128,11 +143,10 @@ func SayAnything(t *tts.Google, p *say.Player, text string) error {
 		return nil
 	}
 
-	text = cleanupText(text, "### Human:")
-	text = cleanupText(text, "### Assistant:")
-	text = cleanupText(text, "### Humano:")
-	text = cleanupText(text, "### Asistente:")
+	text = cleanupText(text, "### " +human+":")
+	text = cleanupText(text, "### " +assistant+":")
 	text = cleanupText(text, "`")
+	text = cleanupText(text, "***")
 
 	if strings.HasPrefix(text, ">") {
 		text = strings.TrimPrefix(text, ">")
