@@ -3,7 +3,7 @@ module github.com/deadprogram/talkinghead/cli
 go 1.20
 
 require (
-	github.com/hybridgroup/go-sayanything v0.0.0-20230410115357-1c8f850b4f39
+	github.com/hybridgroup/go-sayanything v0.0.0-20230418172150-a2d88634dc44
 	github.com/urfave/cli/v2 v2.25.1
 	go.bug.st/serial v1.5.0
 )

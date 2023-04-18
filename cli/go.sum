@@ -57,8 +57,8 @@ github.com/googleapis/gax-go/v2 v2.7.0 h1:IcsPKeInNvYi7eqSaDjiZqDDKu5rsmunY0Y1Yu
 github.com/googleapis/gax-go/v2 v2.7.0/go.mod h1:TEop28CZZQ2y+c0VxMUmu1lV+fQx57QpBWsYpwqHJx8=
 github.com/hajimehoshi/oto v1.0.1 h1:8AMnq0Yr2YmzaiqTg/k1Yzd6IygUGk2we9nmjgbgPn4=
 github.com/hajimehoshi/oto v1.0.1/go.mod h1:wovJ8WWMfFKvP587mhHgot/MBr4DnNy9m6EepeVGnos=
-github.com/hybridgroup/go-sayanything v0.0.0-20230410115357-1c8f850b4f39 h1:FUM6rx/sEVAZvPLOYQxwnoXwQttscxkF4lVnMimJn3c=
-github.com/hybridgroup/go-sayanything v0.0.0-20230410115357-1c8f850b4f39/go.mod h1:zTHgijziKV0hpKYfIA/DipZo9caeCn1wkA3EF8KfBpY=
+github.com/hybridgroup/go-sayanything v0.0.0-20230418172150-a2d88634dc44 h1:aUYCoRK8NhxcmhQ9MPwk778k1iuki4xH2E9TVJRvyZM=
+github.com/hybridgroup/go-sayanything v0.0.0-20230418172150-a2d88634dc44/go.mod h1:zTHgijziKV0hpKYfIA/DipZo9caeCn1wkA3EF8KfBpY=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/prometheus/client_model v0.0.0-20190812154241-14fe0d1b01d4/go.mod h1:xMI15A0UPsDsEKsMN9yxemIoYk6Tm2C1GtYGdfGttqA=
