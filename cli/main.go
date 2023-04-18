@@ -123,30 +123,16 @@ func SayAnything(t *tts.Google, p *say.Player, text string) error {
 		return nil
 	}
 
-	switch lang {
-	case "es-ES":
-		if strings.Contains(text, "### Human:") {
-			// error?
-			return nil
-		}
-
-		if strings.Contains(text, "### Humano:") {
-			text = strings.ReplaceAll(text, "### Humano:", "")
-		}
-
-		if strings.Contains(text, "### Asistente:") {
-			text = strings.ReplaceAll(text, "### Asistente:", "")
-		}
-	case "en-US":
-		if strings.Contains(text, "### Human:") {
-			text = strings.ReplaceAll(text, "### Human:", "")
-		}
-
-		if strings.Contains(text, "### Assistant:") {
-			text = strings.ReplaceAll(text, "### Assistant:", "")
-		}
-
+	if lang == "es-ES" && strings.Contains(text, "### Human:") {
+		// error?
+		return nil
 	}
+
+	text = cleanupText(text, "### Human:")
+	text = cleanupText(text, "### Assistant:")
+	text = cleanupText(text, "### Humano:")
+	text = cleanupText(text, "### Asistente:")
+	text = cleanupText(text, "`")
 
 	if strings.HasPrefix(text, ">") {
 		text = strings.TrimPrefix(text, ">")
@@ -173,4 +159,12 @@ func isPiped() bool {
 	}
 	notPipe := info.Mode()&os.ModeNamedPipe == 0
 	return !notPipe
+}
+
+func cleanupText(text, cleanup string) string {
+	if strings.Contains(text, cleanup) {
+		return strings.ReplaceAll(text, cleanup, "")
+	}
+
+	return text
 }
