@@ -5,17 +5,19 @@ import (
 	"errors"
 	"os"
 	"strings"
+	//"time"
 
-	"github.com/urfave/cli/v2"
-	"go.bug.st/serial"
 	"github.com/hybridgroup/go-sayanything/pkg/say"
 	"github.com/hybridgroup/go-sayanything/pkg/tts"
+	"github.com/urfave/cli/v2"
+	"go.bug.st/serial"
 )
 
 var version = "dev"
 
 var (
-	sp       serial.Port
+	sp   serial.Port
+	lang string
 )
 
 func main() {
@@ -30,7 +32,7 @@ func RunCLI(version string) error {
 		UsageText: "talkinghead <TEXT_TO_SAY>\n   echo \"TEXT_TO_SAY\" | talkinghead",
 		Authors: []*cli.Author{
 			{
-				Name:  "deadprogram",
+				Name: "deadprogram",
 			},
 		},
 		Flags: []cli.Flag{
@@ -41,9 +43,9 @@ func RunCLI(version string) error {
 				Aliases: []string{"l"},
 			},
 			&cli.StringFlag{
-				Name:    "voice",
-				Usage:   "voice to use to speak",
-				Value:   "",
+				Name:  "voice",
+				Usage: "voice to use to speak",
+				Value: "",
 			},
 			&cli.StringFlag{
 				Name:    "keys",
@@ -54,7 +56,7 @@ func RunCLI(version string) error {
 			&cli.StringFlag{
 				Name:    "port",
 				Usage:   "port for LEDs",
-				Value:   "/dev/ttyACM0",
+				Value:   "",
 				Aliases: []string{"p"},
 			},
 		},
@@ -67,7 +69,7 @@ func RunCLI(version string) error {
 		Action: func(c *cli.Context) error {
 			text := strings.Join(c.Args().Slice(), " ")
 
-			lang := c.String("lang")
+			lang = c.String("lang")
 			voice := c.String("voice")
 			keys := c.String("keys")
 			port := c.String("port")
@@ -89,7 +91,7 @@ func RunCLI(version string) error {
 
 			p := say.NewPlayer()
 			defer p.Close()
-		
+
 			// input piped to stdin
 			if isPiped() {
 				scanner := bufio.NewScanner(os.Stdin)
@@ -121,6 +123,35 @@ func SayAnything(t *tts.Google, p *say.Player, text string) error {
 		return nil
 	}
 
+	switch lang {
+	case "es-ES":
+		if strings.Contains(text, "### Human:") {
+			// error?
+			return nil
+		}
+
+		if strings.Contains(text, "### Humano:") {
+			text = strings.ReplaceAll(text, "### Humano:", "")
+		}
+
+		if strings.Contains(text, "### Asistente:") {
+			text = strings.ReplaceAll(text, "### Asistente:", "")
+		}
+	case "en-US":
+		if strings.Contains(text, "### Human:") {
+			text = strings.ReplaceAll(text, "### Human:", "")
+		}
+
+		if strings.Contains(text, "### Assistant:") {
+			text = strings.ReplaceAll(text, "### Assistant:", "")
+		}
+
+	}
+
+	if strings.HasPrefix(text, ">") {
+		text = strings.TrimPrefix(text, ">")
+	}
+
 	data, err := t.Speech(text)
 	if err != nil {
 		return err
@@ -128,6 +159,7 @@ func SayAnything(t *tts.Google, p *say.Player, text string) error {
 
 	if sp != nil {
 		sp.Write([]byte("talk\r"))
+		//time.Sleep(100 * time.Millisecond)
 		defer sp.Write([]byte("stop\r"))
 	}
 
