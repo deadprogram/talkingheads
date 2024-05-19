@@ -10,10 +10,11 @@ import (
 )
 
 var (
-	red = color.RGBA{R: 0xff, G: 0x00, B: 0x00}
-	green = color.RGBA{R: 0x00, G: 0xff, B: 0x00}
-	blue = color.RGBA{R: 0x00, G: 0x00, B: 0xff}
-	black = color.RGBA{R: 0x00, G: 0x00, B: 0x00}
+	red    = color.RGBA{R: 0xff, G: 0x00, B: 0x00}
+	green  = color.RGBA{R: 0x00, G: 0xff, B: 0x00}
+	blue   = color.RGBA{R: 0x00, G: 0x00, B: 0xff}
+	purple = color.RGBA{R: 160, G: 32, B: 240}
+	black  = color.RGBA{R: 0x00, G: 0x00, B: 0x00}
 )
 
 var (
@@ -21,9 +22,11 @@ var (
 	tx    = machine.UART_TX_PIN
 	rx    = machine.UART_RX_PIN
 	input = make([]byte, 0, 64)
-	mode = "off"
+	mode  = "off"
 
 	backpack = gopherbot.Backpack()
+
+	position string
 )
 
 func main() {
@@ -38,8 +41,21 @@ func main() {
 			switch data {
 			case 13:
 				// return key
-				mode = string(input)
+				cmd := string(input)
 				input = input[:0]
+				switch {
+				case cmd == "talk1" || cmd == "talk2" || cmd == "talk3":
+					if cmd[4] == position[0] {
+						// only talk if we are in the right position
+						mode = cmd
+						continue
+					}
+					// everyone else quiet
+					mode = "stop"
+				default:
+					mode = cmd
+				}
+
 			default:
 				// just capture the character
 				input = append(input, data)
@@ -58,6 +74,12 @@ func lights() {
 			backpack.Red()
 		case "talk":
 			backpack.Alternate(green, black)
+		case "talk1":
+			backpack.Alternate(green, black)
+		case "talk2":
+			backpack.Alternate(blue, black)
+		case "talk3":
+			backpack.Alternate(purple, black)
 		case "stop":
 			backpack.Off()
 		default:

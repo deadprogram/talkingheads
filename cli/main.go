@@ -17,7 +17,7 @@ var version = "dev"
 
 var (
 	sp   serial.Port
-	lang, assistant, human string
+	lang, assistant, human, led string
 )
 
 func main() {
@@ -71,6 +71,11 @@ func RunCLI(version string) error {
 				Value:   "Human",
 				Aliases: []string{"hu"},
 			},
+			&cli.StringFlag{
+				Name:    "led",
+				Usage:   "name led command",
+				Value:   "talk",
+			},
 		},
 		Before: func(c *cli.Context) error {
 			if c.NArg() == 0 && !isPiped() {
@@ -87,6 +92,7 @@ func RunCLI(version string) error {
 			port := c.String("port")
 			assistant = c.String("assistant")
 			human = c.String("human")
+			led = c.String("led")
 
 			if len(port) > 0 {
 				// open serial port
@@ -158,7 +164,7 @@ func SayAnything(t *tts.Google, p *say.Player, text string) error {
 	}
 
 	if sp != nil {
-		sp.Write([]byte("talk\r"))
+		sp.Write([]byte(led+"\r"))
 		//time.Sleep(100 * time.Millisecond)
 		defer sp.Write([]byte("stop\r"))
 	}
