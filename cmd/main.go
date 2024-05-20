@@ -2,11 +2,13 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"errors"
+	"log"
 	"os"
 	"strings"
-	//"time"
 
+	"github.com/deadprogram/talkinghead/cmd/llm"
 	"github.com/hybridgroup/go-sayanything/pkg/say"
 	"github.com/hybridgroup/go-sayanything/pkg/tts"
 	"github.com/urfave/cli/v2"
@@ -16,7 +18,7 @@ import (
 var version = "dev"
 
 var (
-	sp   serial.Port
+	sp                          serial.Port
 	lang, assistant, human, led string
 )
 
@@ -72,20 +74,12 @@ func RunCLI(version string) error {
 				Aliases: []string{"hu"},
 			},
 			&cli.StringFlag{
-				Name:    "led",
-				Usage:   "name led command",
-				Value:   "talk",
+				Name:  "led",
+				Usage: "name led command",
+				Value: "talk",
 			},
 		},
-		Before: func(c *cli.Context) error {
-			if c.NArg() == 0 && !isPiped() {
-				return cli.Exit("missing text to play", 1)
-			}
-			return nil
-		},
 		Action: func(c *cli.Context) error {
-			text := strings.Join(c.Args().Slice(), " ")
-
 			lang = c.String("lang")
 			voice := c.String("voice")
 			keys := c.String("keys")
@@ -113,23 +107,37 @@ func RunCLI(version string) error {
 			p := say.NewPlayer()
 			defer p.Close()
 
-			// input piped to stdin
-			if isPiped() {
-				scanner := bufio.NewScanner(os.Stdin)
-				for scanner.Scan() {
-					err := SayAnything(t, p, scanner.Text())
-					if err != nil {
-						return cli.Exit(err, 1)
-					}
-				}
+			prompts := make(chan string)
+			replies := make(chan string)
 
-				if err := scanner.Err(); err != nil {
-					return cli.Exit(err, 1)
-				}
-				return nil
+			llmConf := llm.Config{
+				ModelName:  "llama2",
+				HistSize:   10,
+				SeedPrompt: defaultSeedPrompt,
+			}
+			l, err := llm.New(llmConf)
+			if err != nil {
+				log.Fatal("failed creating LLM client: ", err)
 			}
 
-			return SayAnything(t, p, text)
+			go l.Stream(context.Background(), prompts, replies)
+			go StartSayingAnything(t, p, replies)
+			replies <- "ok ready"
+
+			scanner := bufio.NewScanner(os.Stdin)
+			for scanner.Scan() {
+				prompt := scanner.Text()
+				if len(prompt) == 0 {
+					continue
+				}
+
+				prompts <- prompt
+			}
+
+			if err := scanner.Err(); err != nil {
+				return cli.Exit(err, 1)
+			}
+			return nil
 		},
 	}
 
@@ -139,24 +147,23 @@ func RunCLI(version string) error {
 	return nil
 }
 
+func StartSayingAnything(t *tts.Google, p *say.Player, responses chan string) error {
+	for text := range responses {
+		err := SayAnything(t, p, text)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 func SayAnything(t *tts.Google, p *say.Player, text string) error {
 	if len(text) == 0 {
 		return nil
 	}
 
-	if lang == "es-ES" && strings.Contains(text, "### Human:") {
-		// error?
-		return nil
-	}
-
-	text = cleanupText(text, "### " +human+":")
-	text = cleanupText(text, "### " +assistant+":")
-	text = cleanupText(text, "`")
-	text = cleanupText(text, "***")
-
-	if strings.HasPrefix(text, ">") {
-		text = strings.TrimPrefix(text, ">")
-	}
+	println(text)
 
 	data, err := t.Speech(text)
 	if err != nil {
@@ -164,21 +171,13 @@ func SayAnything(t *tts.Google, p *say.Player, text string) error {
 	}
 
 	if sp != nil {
-		sp.Write([]byte(led+"\r"))
-		//time.Sleep(100 * time.Millisecond)
+		sp.Write([]byte(led + "\r"))
+
 		defer sp.Write([]byte("stop\r"))
 	}
 
-	return p.Say(data)
-}
-
-func isPiped() bool {
-	info, err := os.Stdin.Stat()
-	if err != nil {
-		panic(err)
-	}
-	notPipe := info.Mode()&os.ModeNamedPipe == 0
-	return !notPipe
+	go p.Say(data)
+	return nil
 }
 
 func cleanupText(text, cleanup string) string {
