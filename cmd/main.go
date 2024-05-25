@@ -78,6 +78,10 @@ func RunCLI(version string) error {
 				Usage: "name led command",
 				Value: "talk",
 			},
+			&cli.StringFlag{
+				Name:  "speak",
+				Usage: "just say something",
+			},
 		},
 		Action: func(c *cli.Context) error {
 			lang = c.String("lang")
@@ -106,6 +110,10 @@ func RunCLI(version string) error {
 
 			p := say.NewPlayer()
 			defer p.Close()
+
+			if c.String("speak") != "" {
+				return SayAnythingOnce(t, p, c.String("speak"))
+			}
 
 			prompts := make(chan string)
 			replies := make(chan string)
@@ -158,6 +166,8 @@ func StartSayingAnything(t *tts.Google, p *say.Player, responses chan string) er
 	return nil
 }
 
+var speaking = 0
+
 func SayAnything(t *tts.Google, p *say.Player, text string) error {
 	if len(text) == 0 {
 		return nil
@@ -170,13 +180,51 @@ func SayAnything(t *tts.Google, p *say.Player, text string) error {
 		return err
 	}
 
+	speaking++
 	if sp != nil {
 		sp.Write([]byte(led + "\r"))
-
-		defer sp.Write([]byte("stop\r"))
 	}
 
-	go p.Say(data)
+	go func() {
+		p.Say(data)
+		speaking--
+
+		if sp != nil {
+			if speaking == 0 {
+				sp.Write([]byte("stop\r"))
+			}
+		}
+	}()
+
+	return nil
+}
+
+func SayAnythingOnce(t *tts.Google, p *say.Player, text string) error {
+	if len(text) == 0 {
+		return nil
+	}
+
+	println(text)
+
+	data, err := t.Speech(text)
+	if err != nil {
+		return err
+	}
+
+	speaking++
+	if sp != nil {
+		sp.Write([]byte(led + "\r"))
+	}
+
+	p.Say(data)
+	speaking--
+
+	if sp != nil {
+		if speaking == 0 {
+			sp.Write([]byte("stop\r"))
+		}
+	}
+
 	return nil
 }
 

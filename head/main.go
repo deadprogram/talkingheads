@@ -2,19 +2,12 @@ package main
 
 import (
 	"machine"
+	"math/rand"
 
-	"image/color"
 	"time"
 
 	"github.com/hybridgroup/gopherbot"
-)
-
-var (
-	red    = color.RGBA{R: 0xff, G: 0x00, B: 0x00}
-	green  = color.RGBA{R: 0x00, G: 0xff, B: 0x00}
-	blue   = color.RGBA{R: 0x00, G: 0x00, B: 0xff}
-	purple = color.RGBA{R: 160, G: 32, B: 240}
-	black  = color.RGBA{R: 0x00, G: 0x00, B: 0x00}
+	"tinygo.org/x/drivers/servo"
 )
 
 var (
@@ -25,7 +18,8 @@ var (
 	mode  = "off"
 
 	backpack = gopherbot.Backpack()
-
+	head     = NewHeadLED()
+	svo      servo.Servo
 	position string
 )
 
@@ -33,6 +27,7 @@ func main() {
 	uart.Configure(machine.UARTConfig{TX: tx, RX: rx})
 
 	go lights()
+	go motion()
 
 	for {
 		if uart.Buffered() > 0 {
@@ -70,22 +65,58 @@ func lights() {
 		switch mode {
 		case "green":
 			backpack.Green()
+			head.Green()
 		case "red":
 			backpack.Red()
+			head.Red()
 		case "talk":
 			backpack.Alternate(green, black)
+			head.Alternate(green, blue)
 		case "talk1":
 			backpack.Alternate(green, black)
+			head.Alternate(green, black)
 		case "talk2":
 			backpack.Alternate(blue, black)
+			head.Alternate(blue, red)
 		case "talk3":
-			backpack.Alternate(purple, black)
+			backpack.Alternate(red, black)
+			head.Alternate(red, black)
 		case "stop":
 			backpack.Off()
+			head.Off()
 		default:
 			backpack.Off()
+			head.Off()
 		}
 
 		time.Sleep(200 * time.Millisecond)
 	}
+}
+
+func motion() {
+	svo, _ = servo.New(machine.TCC0, machine.A1)
+
+	for {
+		switch mode {
+		case "talk":
+			svo.SetAngle(randomInt(50, 130))
+		case "talk1":
+			svo.SetAngle(90)
+		case "talk2":
+			svo.SetAngle(90)
+		case "talk3":
+			svo.SetAngle(90)
+		case "stop":
+			svo.SetAngle(90)
+		default:
+			svo.SetAngle(90)
+		}
+
+		time.Sleep(1500 * time.Millisecond)
+	}
+}
+
+// Returns an int >= min, < max
+func randomInt(min, max int) int {
+	return min + rand.Intn(max-min)
 }
