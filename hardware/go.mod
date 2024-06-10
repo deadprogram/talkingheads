@@ -1,4 +1,4 @@
-module github.com/deadprogram/talkinghead
+module github.com/deadprogram/talkingheads/hardware
 
 go 1.20
 
