@@ -6,7 +6,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/deadprogram/talkingheads/cmd/speaker/llm"
+	"github.com/deadprogram/talkingheads/cmd/panelist/llm"
 	"github.com/hybridgroup/go-sayanything/pkg/say"
 	"github.com/hybridgroup/go-sayanything/pkg/tts"
 	"github.com/tmc/langchaingo/llms"
