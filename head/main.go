@@ -38,18 +38,7 @@ func main() {
 				// return key
 				cmd := string(input)
 				input = input[:0]
-				switch {
-				case cmd == "talk1" || cmd == "talk2" || cmd == "talk3":
-					if cmd[4] == position[0] {
-						// only talk if we are in the right position
-						mode = cmd
-						continue
-					}
-					// everyone else quiet
-					mode = "stop"
-				default:
-					mode = cmd
-				}
+				mode = cmd
 
 			default:
 				// just capture the character
@@ -98,18 +87,26 @@ func motion() {
 
 	for {
 		switch mode {
-		case "talk":
-			svo.SetAngle(randomInt(50, 130))
-		case "talk1":
-			svo.SetAngle(90)
-		case "talk2":
-			svo.SetAngle(90)
-		case "talk3":
-			svo.SetAngle(90)
+		case "off":
+			break
+		case "left":
+			if position != "left" {
+				svo.SetAngle(75)
+				position = "left"
+			}
+		case "right":
+			if position != "right" {
+				svo.SetAngle(115)
+				position = "right"
+			}
 		case "stop":
-			svo.SetAngle(90)
+			if position != "center" {
+				svo.SetAngle(90)
+				position = "center"
+			}
 		default:
-			svo.SetAngle(90)
+			svo.SetAngle(randomInt(50, 130))
+			position = "random"
 		}
 
 		time.Sleep(1500 * time.Millisecond)
