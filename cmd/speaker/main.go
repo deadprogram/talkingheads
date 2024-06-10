@@ -1,16 +1,15 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"errors"
 	"log"
 	"os"
-	"strings"
 
 	"github.com/deadprogram/talkingheads/cmd/speaker/llm"
 	"github.com/hybridgroup/go-sayanything/pkg/say"
 	"github.com/hybridgroup/go-sayanything/pkg/tts"
+	"github.com/tmc/langchaingo/llms"
 	"github.com/urfave/cli/v2"
 	"go.bug.st/serial"
 )
@@ -18,8 +17,8 @@ import (
 var version = "dev"
 
 var (
-	sp                                 serial.Port
-	model, lang, assistant, human, led string
+	sp                            serial.Port
+	model, lang, name, human, led string
 )
 
 func main() {
@@ -68,10 +67,9 @@ func RunCLI(version string) error {
 				Aliases: []string{"p"},
 			},
 			&cli.StringFlag{
-				Name:    "assistant",
-				Usage:   "name of assistant",
-				Value:   "Assistant",
-				Aliases: []string{"a"},
+				Name:  "name",
+				Usage: "name of assistant",
+				Value: "Assistant",
 			},
 			&cli.StringFlag{
 				Name:    "human",
@@ -88,6 +86,11 @@ func RunCLI(version string) error {
 				Name:  "speak",
 				Usage: "just say something",
 			},
+
+			&cli.StringFlag{
+				Name:  "server",
+				Usage: "mqtt server",
+			},
 		},
 		Action: func(c *cli.Context) error {
 			model = c.String("model")
@@ -95,7 +98,7 @@ func RunCLI(version string) error {
 			voice := c.String("voice")
 			keys := c.String("keys")
 			port := c.String("port")
-			assistant = c.String("assistant")
+			name = c.String("name")
 			human = c.String("human")
 			led = c.String("led")
 
@@ -122,8 +125,12 @@ func RunCLI(version string) error {
 				return SayAnythingOnce(t, p, c.String("speak"))
 			}
 
-			prompts := make(chan string)
-			replies := make(chan string)
+			questions := make(chan llms.HumanChatMessage)
+			speaking := make(chan string)
+			var replies chan llms.AIChatMessage
+			if c.String("server") != "" {
+				replies = make(chan llms.AIChatMessage)
+			}
 
 			var seedPrompt, seedQuestion, seedResponse string
 			switch model {
@@ -157,24 +164,15 @@ func RunCLI(version string) error {
 				log.Fatal("failed creating LLM client: ", err)
 			}
 
-			go l.Stream(context.Background(), prompts, replies)
-			go StartSayingAnything(t, p, replies)
-			replies <- "ok ready"
+			go l.Stream(context.Background(), questions, speaking, replies)
+			go StartSayingAnything(t, p, speaking)
+			speaking <- name + " ready."
 
-			scanner := bufio.NewScanner(os.Stdin)
-			for scanner.Scan() {
-				prompt := scanner.Text()
-				if len(prompt) == 0 {
-					continue
-				}
-
-				prompts <- prompt
+			if c.String("server") != "" {
+				return startMQTT(name, c.String("server"), questions, speaking, replies)
 			}
 
-			if err := scanner.Err(); err != nil {
-				return cli.Exit(err, 1)
-			}
-			return nil
+			return startKeyboardInput(questions)
 		},
 	}
 
@@ -182,85 +180,4 @@ func RunCLI(version string) error {
 		return cli.Exit(err, 1)
 	}
 	return nil
-}
-
-func StartSayingAnything(t *tts.Google, p *say.Player, responses chan string) error {
-	for text := range responses {
-		err := SayAnything(t, p, text)
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-var speaking = 0
-
-func SayAnything(t *tts.Google, p *say.Player, text string) error {
-	if len(text) == 0 {
-		return nil
-	}
-
-	println(text)
-
-	data, err := t.Speech(text)
-	if err != nil {
-		return err
-	}
-
-	speaking++
-	if sp != nil {
-		sp.Write([]byte(led + "\r"))
-	}
-
-	go func() {
-		p.Say(data)
-		speaking--
-
-		if sp != nil {
-			if speaking == 0 {
-				sp.Write([]byte("stop\r"))
-			}
-		}
-	}()
-
-	return nil
-}
-
-func SayAnythingOnce(t *tts.Google, p *say.Player, text string) error {
-	if len(text) == 0 {
-		return nil
-	}
-
-	println(text)
-
-	data, err := t.Speech(text)
-	if err != nil {
-		return err
-	}
-
-	speaking++
-	if sp != nil {
-		sp.Write([]byte(led + "\r"))
-	}
-
-	p.Say(data)
-	speaking--
-
-	if sp != nil {
-		if speaking == 0 {
-			sp.Write([]byte("stop\r"))
-		}
-	}
-
-	return nil
-}
-
-func cleanupText(text, cleanup string) string {
-	if strings.Contains(text, cleanup) {
-		return strings.ReplaceAll(text, cleanup, "")
-	}
-
-	return text
 }

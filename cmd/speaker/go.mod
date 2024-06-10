@@ -3,6 +3,7 @@ module github.com/deadprogram/talkingheads/cmd/speaker
 go 1.22.0
 
 require (
+	github.com/eclipse/paho.mqtt.golang v1.4.3
 	github.com/hybridgroup/go-sayanything v0.0.0-20230418172150-a2d88634dc44
 	github.com/tmc/langchaingo v0.1.10
 	github.com/urfave/cli/v2 v2.25.1
@@ -33,6 +34,7 @@ require (
 	github.com/googleapis/enterprise-certificate-proxy v0.3.2 // indirect
 	github.com/googleapis/gax-go/v2 v2.12.3 // indirect
 	github.com/goph/emperror v0.17.2 // indirect
+	github.com/gorilla/websocket v1.5.0 // indirect
 	github.com/hajimehoshi/oto v1.0.1 // indirect
 	github.com/huandu/xstrings v1.3.3 // indirect
 	github.com/imdario/mergo v0.3.13 // indirect

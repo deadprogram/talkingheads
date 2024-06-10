@@ -2,7 +2,6 @@ package llm
 
 import (
 	"context"
-	"fmt"
 	"log"
 
 	"github.com/tmc/langchaingo/llms"
@@ -20,11 +19,11 @@ type Config struct {
 }
 
 type LLM struct {
-	model           *ollama.LLM
-	seedPrompt      string
-	initialQuestion string
-	initialResponse string
-	histSize        uint
+	config     Config
+	model      *ollama.LLM
+	seedPrompt string
+	histSize   uint
+	history    *memory.ChatMessageHistory
 }
 
 func New(c Config) (*LLM, error) {
@@ -32,24 +31,17 @@ func New(c Config) (*LLM, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	return &LLM{
-		model:           model,
-		seedPrompt:      c.SeedPrompt,
-		initialQuestion: c.InitialQuestion,
-		initialResponse: c.InitialResponse,
-		histSize:        c.HistSize,
+		config:     c,
+		model:      model,
+		seedPrompt: c.SeedPrompt,
+		histSize:   c.HistSize,
+		history:    memory.NewChatMessageHistory(),
 	}, nil
 }
 
-func sendChunk(ctx context.Context, chunks chan string, chunk []byte) error {
-	select {
-	case <-ctx.Done():
-	case chunks <- string(chunk):
-	}
-	return nil
-}
-
-func (l *LLM) Stream(ctx context.Context, promptsCh chan string, replyChunks chan string) error {
+func (l *LLM) Stream(ctx context.Context, questions chan llms.HumanChatMessage, replyChunks chan string, replies chan llms.AIChatMessage) error {
 	log.Println("launching LLM stream")
 	defer log.Println("done streaming LLM")
 
@@ -69,10 +61,8 @@ func (l *LLM) Stream(ctx context.Context, promptsCh chan string, replyChunks cha
 		),
 	})
 
-	fmt.Println("Seed prompt: ", l.seedPrompt)
-	history := memory.NewChatMessageHistory()
-	history.AddUserMessage(ctx, l.initialQuestion)
-	history.AddAIMessage(ctx, l.initialResponse)
+	l.history.AddUserMessage(ctx, l.config.InitialQuestion)
+	l.history.AddAIMessage(ctx, l.config.InitialResponse)
 
 	buf := NewFixedSizeBuffer(MaxTTSBufferSize)
 
@@ -80,11 +70,11 @@ func (l *LLM) Stream(ctx context.Context, promptsCh chan string, replyChunks cha
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case promptText := <-promptsCh:
-			historyMessages, _ := history.Messages(ctx)
+		case question := <-questions:
+			historyMessages, _ := l.history.Messages(ctx)
 			pt, _ := promptTmpl.Format(map[string]any{
 				"historyMessages": historyMessages,
-				"question":        promptText,
+				"question":        question.GetContent(),
 			})
 
 			response, err := llms.GenerateFromSinglePrompt(ctx, l.model, pt,
@@ -130,8 +120,14 @@ func (l *LLM) Stream(ctx context.Context, promptsCh chan string, replyChunks cha
 				return err
 			}
 
-			history.AddUserMessage(ctx, promptText)
-			history.AddAIMessage(ctx, response)
+			l.history.AddMessage(ctx, question)
+			aiMsg := llms.AIChatMessage{Content: response}
+			l.history.AddMessage(ctx, aiMsg)
+
+			// only used for mqtt
+			if replies != nil {
+				replies <- aiMsg
+			}
 		}
 	}
 }
