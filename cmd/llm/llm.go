@@ -7,18 +7,24 @@ import (
 
 	"github.com/tmc/langchaingo/llms"
 	"github.com/tmc/langchaingo/llms/ollama"
+	"github.com/tmc/langchaingo/memory"
+	"github.com/tmc/langchaingo/prompts"
 )
 
 type Config struct {
-	ModelName  string
-	HistSize   uint
-	SeedPrompt string
+	ModelName       string
+	HistSize        uint
+	SeedPrompt      string
+	InitialQuestion string
+	InitialResponse string
 }
 
 type LLM struct {
-	model      *ollama.LLM
-	seedPrompt string
-	histSize   uint
+	model           *ollama.LLM
+	seedPrompt      string
+	initialQuestion string
+	initialResponse string
+	histSize        uint
 }
 
 func New(c Config) (*LLM, error) {
@@ -27,9 +33,11 @@ func New(c Config) (*LLM, error) {
 		return nil, err
 	}
 	return &LLM{
-		model:      model,
-		seedPrompt: c.SeedPrompt,
-		histSize:   c.HistSize,
+		model:           model,
+		seedPrompt:      c.SeedPrompt,
+		initialQuestion: c.InitialQuestion,
+		initialResponse: c.InitialResponse,
+		histSize:        c.HistSize,
 	}, nil
 }
 
@@ -41,13 +49,30 @@ func sendChunk(ctx context.Context, chunks chan string, chunk []byte) error {
 	return nil
 }
 
-func (l *LLM) Stream(ctx context.Context, prompts chan string, replyChunks chan string) error {
+func (l *LLM) Stream(ctx context.Context, promptsCh chan string, replyChunks chan string) error {
 	log.Println("launching LLM stream")
 	defer log.Println("done streaming LLM")
-	chat := NewHistory(int(l.histSize))
-	chat.Add(l.seedPrompt)
+
+	promptTmpl := prompts.NewChatPromptTemplate([]prompts.MessageFormatter{
+		prompts.NewSystemMessagePromptTemplate(
+			l.seedPrompt,
+			nil,
+		),
+		prompts.NewGenericMessagePromptTemplate(
+			"history",
+			"{{range .historyMessages}}{{.GetContent}}\n{{end}}",
+			[]string{"history"},
+		),
+		prompts.NewHumanMessagePromptTemplate(
+			`{{.question}}`,
+			[]string{"question"},
+		),
+	})
 
 	fmt.Println("Seed prompt: ", l.seedPrompt)
+	history := memory.NewChatMessageHistory()
+	history.AddUserMessage(ctx, l.initialQuestion)
+	history.AddAIMessage(ctx, l.initialResponse)
 
 	buf := NewFixedSizeBuffer(MaxTTSBufferSize)
 
@@ -55,9 +80,14 @@ func (l *LLM) Stream(ctx context.Context, prompts chan string, replyChunks chan 
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case prompt := <-prompts:
-			chat.Add(prompt)
-			_, err := llms.GenerateFromSinglePrompt(ctx, l.model, chat.String(),
+		case promptText := <-promptsCh:
+			historyMessages, _ := history.Messages(ctx)
+			pt, _ := promptTmpl.Format(map[string]any{
+				"historyMessages": historyMessages,
+				"question":        promptText,
+			})
+
+			response, err := llms.GenerateFromSinglePrompt(ctx, l.model, pt,
 				llms.WithStreamingFunc(func(_ context.Context, chunk []byte) error {
 					select {
 					case <-ctx.Done():
@@ -99,6 +129,9 @@ func (l *LLM) Stream(ctx context.Context, prompts chan string, replyChunks chan 
 			if err != nil {
 				return err
 			}
+
+			history.AddUserMessage(ctx, promptText)
+			history.AddAIMessage(ctx, response)
 		}
 	}
 }

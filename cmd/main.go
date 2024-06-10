@@ -18,8 +18,8 @@ import (
 var version = "dev"
 
 var (
-	sp                          serial.Port
-	lang, assistant, human, led string
+	sp                                 serial.Port
+	model, lang, assistant, human, led string
 )
 
 func main() {
@@ -38,6 +38,12 @@ func RunCLI(version string) error {
 			},
 		},
 		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:    "model",
+				Usage:   "model to use",
+				Value:   "llama2",
+				Aliases: []string{"m"},
+			},
 			&cli.StringFlag{
 				Name:    "lang",
 				Usage:   "language of the text",
@@ -84,6 +90,7 @@ func RunCLI(version string) error {
 			},
 		},
 		Action: func(c *cli.Context) error {
+			model = c.String("model")
 			lang = c.String("lang")
 			voice := c.String("voice")
 			keys := c.String("keys")
@@ -118,10 +125,32 @@ func RunCLI(version string) error {
 			prompts := make(chan string)
 			replies := make(chan string)
 
+			var seedPrompt, seedQuestion, seedResponse string
+			switch model {
+			case "llama2":
+				seedPrompt = llamaSeedPrompt
+				seedQuestion = llamaQuestionPrompt
+				seedResponse = llamaResponsePrompt
+			case "gemma":
+				seedPrompt = gemmaSeedPrompt
+				seedQuestion = gemmaQuestionPrompt
+				seedResponse = gemmaResponsePrompt
+			case "phi3":
+				seedPrompt = phiSeedPrompt
+				seedQuestion = phiQuestionPrompt
+				seedResponse = phiResponsePrompt
+			default:
+				seedPrompt = llamaSeedPrompt
+				seedQuestion = llamaQuestionPrompt
+				seedResponse = llamaResponsePrompt
+			}
+
 			llmConf := llm.Config{
-				ModelName:  "llama2",
-				HistSize:   10,
-				SeedPrompt: defaultSeedPrompt,
+				ModelName:       model,
+				HistSize:        10,
+				SeedPrompt:      seedPrompt,
+				InitialQuestion: seedQuestion,
+				InitialResponse: seedResponse,
 			}
 			l, err := llm.New(llmConf)
 			if err != nil {
