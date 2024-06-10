@@ -8,7 +8,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/deadprogram/talkinghead/cmd/llm"
+	"github.com/deadprogram/talkingheads/cmd/speaker/llm"
 	"github.com/hybridgroup/go-sayanything/pkg/say"
 	"github.com/hybridgroup/go-sayanything/pkg/tts"
 	"github.com/urfave/cli/v2"
@@ -29,9 +29,9 @@ func main() {
 // RunCLI runs the CLI command
 func RunCLI(version string) error {
 	app := &cli.App{
-		Name:      "talkinghead",
-		Usage:     "just a head",
-		UsageText: "talkinghead <TEXT_TO_SAY>\n   echo \"TEXT_TO_SAY\" | talkinghead",
+		Name:      "talkingheads",
+		Usage:     "stop making sense",
+		UsageText: "talkingheads <TEXT_TO_SAY>\n   echo \"TEXT_TO_SAY\" | talkingheads",
 		Authors: []*cli.Author{
 			{
 				Name: "deadprogram",

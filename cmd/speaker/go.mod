@@ -1,4 +1,4 @@
-module github.com/deadprogram/talkinghead/cmd
+module github.com/deadprogram/talkingheads/cmd/speaker
 
 go 1.22.0
 
