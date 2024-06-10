@@ -8,9 +8,14 @@ import (
 	"github.com/tmc/langchaingo/llms"
 )
 
+type question struct {
+	Content string `json:"content"`
+	To      string `json:"to"`
+}
+
 type conversation struct {
 	client    mqtt.Client
-	questions chan llms.HumanChatMessage
+	questions chan question //llms.HumanChatMessage
 	responses chan llms.AIChatMessage
 }
 
@@ -29,7 +34,7 @@ func startConversation(server string) (*conversation, error) {
 
 	c := &conversation{
 		client:    client,
-		questions: make(chan llms.HumanChatMessage),
+		questions: make(chan question),
 		responses: make(chan llms.AIChatMessage),
 	}
 
@@ -58,11 +63,11 @@ func (c *conversation) handleResponse(client mqtt.Client, msg mqtt.Message) {
 }
 
 func (c *conversation) handleQuestions() error {
-	// TODO: how to determine which panelist should take the question
-	name := "llama"
-	discuss := "discuss/" + name
 	for question := range c.questions {
-		msg, err := json.Marshal(question)
+		name := question.To
+		discuss := "discuss/" + name
+
+		msg, err := json.Marshal(llms.HumanChatMessage{Content: question.Content})
 		if err != nil {
 			log.Println("failed marshalling message: ", err)
 			return err
