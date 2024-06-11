@@ -41,7 +41,7 @@ func New(c Config) (*LLM, error) {
 	}, nil
 }
 
-func (l *LLM) Stream(ctx context.Context, questions chan llms.HumanChatMessage, replyChunks chan string, replies chan llms.AIChatMessage) error {
+func (l *LLM) Stream(ctx context.Context, questions chan llms.HumanChatMessage, replyChunks chan string, replies chan llms.AIChatMessage, others chan llms.GenericChatMessage) error {
 	log.Println("launching LLM stream")
 	defer log.Println("done streaming LLM")
 
@@ -72,12 +72,14 @@ func (l *LLM) Stream(ctx context.Context, questions chan llms.HumanChatMessage, 
 			return ctx.Err()
 		case question := <-questions:
 			historyMessages, _ := l.history.Messages(ctx)
-			pt, _ := promptTmpl.Format(map[string]any{
+			prompt, _ := promptTmpl.FormatPrompt(map[string]any{
 				"historyMessages": historyMessages,
 				"question":        question.GetContent(),
 			})
 
-			response, err := llms.GenerateFromSinglePrompt(ctx, l.model, pt,
+			mc := chatMessagesToMessageContent(prompt.Messages())
+
+			response, err := l.model.GenerateContent(ctx, mc,
 				llms.WithStreamingFunc(func(_ context.Context, chunk []byte) error {
 					select {
 					case <-ctx.Done():
@@ -121,13 +123,58 @@ func (l *LLM) Stream(ctx context.Context, questions chan llms.HumanChatMessage, 
 			}
 
 			l.history.AddMessage(ctx, question)
-			aiMsg := llms.AIChatMessage{Content: response}
-			l.history.AddMessage(ctx, aiMsg)
+			for _, r := range response.Choices {
+				aiMsg := llms.AIChatMessage{Content: r.Content}
+				l.history.AddMessage(ctx, aiMsg)
+				if replies != nil {
+					replies <- aiMsg
+				}
+			}
 
 			// only used for mqtt
-			if replies != nil {
-				replies <- aiMsg
-			}
+		case other := <-others:
+			l.history.AddMessage(ctx, other)
 		}
 	}
+}
+
+func chatMessagesToMessageContent(chat []llms.ChatMessage) []llms.MessageContent {
+	mcs := make([]llms.MessageContent, len(chat))
+	for i, msg := range chat {
+		role := msg.GetType()
+		text := msg.GetContent()
+
+		var mc llms.MessageContent
+
+		switch p := msg.(type) {
+		case llms.ToolChatMessage:
+			mc = llms.MessageContent{
+				Role: role,
+				Parts: []llms.ContentPart{llms.ToolCallResponse{
+					ToolCallID: p.ID,
+					Content:    p.Content,
+				}},
+			}
+
+		case llms.AIChatMessage:
+			mc = llms.MessageContent{
+				Role: role,
+				Parts: []llms.ContentPart{
+					llms.ToolCall{
+						ID:           p.ToolCalls[0].ID,
+						Type:         p.ToolCalls[0].Type,
+						FunctionCall: p.ToolCalls[0].FunctionCall,
+					},
+				},
+			}
+		default:
+			mc = llms.MessageContent{
+				Role:  role,
+				Parts: []llms.ContentPart{llms.TextContent{Text: text}},
+			}
+		}
+		mcs[i] = mc
+	}
+
+	return mcs
 }

@@ -125,11 +125,13 @@ func RunCLI(version string) error {
 				return SayAnythingOnce(t, p, c.String("speak"))
 			}
 
-			questions := make(chan llms.HumanChatMessage)
-			speaking := make(chan string)
+			questions := make(chan llms.HumanChatMessage, 1)
+			speaking := make(chan string, 1)
+			others := make(chan llms.GenericChatMessage, 1)
+
 			var replies chan llms.AIChatMessage
 			if c.String("server") != "" {
-				replies = make(chan llms.AIChatMessage)
+				replies = make(chan llms.AIChatMessage, 1)
 			}
 
 			var seedPrompt, seedQuestion, seedResponse string
@@ -164,12 +166,18 @@ func RunCLI(version string) error {
 				log.Fatal("failed creating LLM client: ", err)
 			}
 
-			go l.Stream(context.Background(), questions, speaking, replies)
+			go l.Stream(context.Background(), questions, speaking, replies, others)
 			go StartSayingAnything(t, p, speaking)
+
 			speaking <- name + " ready."
 
 			if c.String("server") != "" {
-				return startMQTT(name, c.String("server"), questions, speaking, replies)
+				go startMQTT(name, c.String("server"), questions, speaking, replies, others)
+
+				select {
+				case <-context.Background().Done():
+					return nil
+				}
 			}
 
 			return startKeyboardInput(questions)

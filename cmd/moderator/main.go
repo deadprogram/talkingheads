@@ -39,10 +39,13 @@ func RunCLI(version string) error {
 				log.Fatal("server is required")
 			}
 
-			conv, err := startConversation(c.String("server"))
+			conv, err := newConversation(c.String("server"))
 			if err != nil {
 				log.Fatal(err)
 			}
+
+			go conv.processQuestions()
+			go conv.processResponses()
 
 			return startKeyboardInput(conv.questions)
 		},

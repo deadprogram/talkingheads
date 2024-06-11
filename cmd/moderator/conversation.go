@@ -1,8 +1,11 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"log"
+	"strings"
+	"time"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/tmc/langchaingo/llms"
@@ -13,16 +16,22 @@ type question struct {
 	To      string `json:"to"`
 }
 
-type conversation struct {
-	client    mqtt.Client
-	questions chan question //llms.HumanChatMessage
-	responses chan llms.AIChatMessage
+type response struct {
+	Content string `json:"content"`
+	From    string `json:"from"`
 }
 
-func startConversation(server string) (*conversation, error) {
+type conversation struct {
+	client    mqtt.Client
+	questions chan question
+	responses chan response
+}
+
+func newConversation(server string) (*conversation, error) {
 	options := mqtt.NewClientOptions()
 	options.AddBroker(server)
 	options.SetClientID("moderator")
+	options.KeepAlive = 300
 
 	log.Printf("Connecting to MQTT broker at %s\n", server)
 	client := mqtt.NewClient(options)
@@ -35,34 +44,44 @@ func startConversation(server string) (*conversation, error) {
 	c := &conversation{
 		client:    client,
 		questions: make(chan question),
-		responses: make(chan llms.AIChatMessage),
+		responses: make(chan response),
 	}
-
-	responseTopic := "response/#"
-	token = client.Subscribe(responseTopic, 0, c.handleResponse)
-	if token.Wait() && token.Error() != nil {
-		log.Fatal("failed subscribing to MQTT topic: ", token.Error())
-		return nil, token.Error()
-	}
-	log.Printf("Subscribed to topic %s\n", responseTopic)
-
-	go c.handleQuestions()
 
 	return c, nil
 }
 
+func (c *conversation) processResponses() error {
+	responseTopic := "response/#"
+	token := c.client.Subscribe(responseTopic, 0, c.handleResponse)
+	if token.Wait() && token.Error() != nil {
+		log.Fatal("failed subscribing to MQTT topic: ", token.Error())
+		return token.Error()
+	}
+	log.Printf("Subscribed to topic %s\n", responseTopic)
+
+	for {
+		select {
+		case <-context.Background().Done():
+			return nil
+		default:
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+}
+
 func (c *conversation) handleResponse(client mqtt.Client, msg mqtt.Message) {
 	log.Printf("Received message: %s\n", string(msg.Payload()))
-	response := llms.AIChatMessage{}
-	if err := json.Unmarshal(msg.Payload(), &response); err != nil {
+	airesponse := llms.AIChatMessage{}
+	if err := json.Unmarshal(msg.Payload(), &airesponse); err != nil {
 		log.Println("failed unmarshalling message: ", err)
 		return
 	}
 
-	c.responses <- response
+	from := strings.Split(msg.Topic(), "/")[1]
+	c.responses <- response{From: from, Content: airesponse.Content}
 }
 
-func (c *conversation) handleQuestions() error {
+func (c *conversation) processQuestions() error {
 	for question := range c.questions {
 		name := question.To
 		discuss := "discuss/" + name
