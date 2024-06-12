@@ -2,8 +2,7 @@
 
 Stop making sense...
 
-
-## Running
+## Model server
 
 Start ollama
 
@@ -26,21 +25,34 @@ docker start ollama
 Download models
 
 ```shell
-docker exec ollama ollama run llama2
+docker exec ollama ollama run llama3
+docker exec ollama ollama run phi3
+docker exec ollama ollama run gemma
 ```
 
-
-
-Run the CLI
-
-```shell
-cd cmd
-go run ./panelist -k /home/ron/sayanything-383222-88419296b765.json -l="en-US" -voice="en-US-Neural2-D"
-```
-
-
-Running MQTT broker
+## MQTT broker
 
 ```shell
 docker run --network host eclipse-mosquitto
+```
+
+## TTS Engine
+
+https://github.com/rhasspy/piper
+
+- download binary
+- add to path
+- download voices to `./voices`
+
+## Panelist
+
+```shell
+cd cmd
+go run ./panelist/ -l="en-US" -voice="hfc_female-medium" -data="../voices" -tts-engine="piper" -model="llama3" -name="llama" -server="localhost:1883"
+```
+
+## Moderator
+
+```shell
+go run ./moderator/ -server="localhost:1883"
 ```
