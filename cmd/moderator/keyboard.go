@@ -6,13 +6,17 @@ import (
 	"log"
 	"os"
 	"strings"
+	"time"
 )
 
 func startKeyboardInput(questions chan question) error {
+	fmt.Println("Enter a question for a panelist (llama, phi, gemma):")
+
 	scanner := bufio.NewScanner(os.Stdin)
 	for scanner.Scan() {
 		text := scanner.Text()
 		if len(text) == 0 {
+			time.Sleep(100 * time.Millisecond)
 			continue
 		}
 

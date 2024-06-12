@@ -9,10 +9,6 @@ import (
 
 var version = "dev"
 
-var (
-	model, lang, name, human, led string
-)
-
 func main() {
 	RunCLI(version)
 }
@@ -45,7 +41,6 @@ func RunCLI(version string) error {
 			}
 
 			go conv.processQuestions()
-			go conv.processResponses()
 
 			return startKeyboardInput(conv.questions)
 		},
