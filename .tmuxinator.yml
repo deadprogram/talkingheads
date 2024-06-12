@@ -1,0 +1,20 @@
+project_name: talkingheads
+
+pre_window: gvm use go1.22.4
+
+windows:
+  - main:
+      layout: main-horizontal
+      panes:
+        - moderator:
+          - cd ./cmd
+          - go run ./moderator/ -server="localhost:1883"
+        - llama:
+          - cd ./cmd
+          - go run ./panelist/ -l="en-US" -voice="hfc_female-medium" -data="../voices" -tts-engine="piper" -model="llama3" -name="llama" -server="localhost:1883"
+        - phi:
+          - cd ./cmd
+          - go run ./panelist/ -l="en-US" -voice="hfc_male-medium" -data="../voices" -tts-engine="piper" -model="phi3" -name="phi" -server="localhost:1883"
+        - gemma:
+          - cd ./cmd
+          - go run ./panelist/ -l="en-US" -voice="ljspeech-medium" -data="../voices" -tts-engine="piper" -model="gemma" -name="gemma" -server="localhost:1883"
