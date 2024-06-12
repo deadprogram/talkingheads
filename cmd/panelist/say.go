@@ -7,7 +7,7 @@ import (
 	"github.com/hybridgroup/go-sayanything/pkg/tts"
 )
 
-func StartSayingAnything(t *tts.Google, p *say.Player, responses chan string) error {
+func StartSayingAnything(t tts.Speaker, p *say.Player, responses chan string) error {
 	for text := range responses {
 		err := SayAnything(t, p, text)
 		if err != nil {
@@ -20,7 +20,7 @@ func StartSayingAnything(t *tts.Google, p *say.Player, responses chan string) er
 
 var speaking = 0
 
-func SayAnything(t *tts.Google, p *say.Player, text string) error {
+func SayAnything(t tts.Speaker, p *say.Player, text string) error {
 	if len(text) == 0 {
 		return nil
 	}
@@ -51,7 +51,7 @@ func SayAnything(t *tts.Google, p *say.Player, text string) error {
 	return nil
 }
 
-func SayAnythingOnce(t *tts.Google, p *say.Player, text string) error {
+func SayAnythingOnce(t tts.Speaker, p *say.Player, text string) error {
 	if len(text) == 0 {
 		return nil
 	}

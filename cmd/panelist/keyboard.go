@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"log"
 	"os"
+	"time"
 
 	"github.com/tmc/langchaingo/llms"
 )
@@ -13,6 +14,7 @@ func startKeyboardInput(questions chan llms.HumanChatMessage) error {
 	for scanner.Scan() {
 		question := scanner.Text()
 		if len(question) == 0 {
+			time.Sleep(100 * time.Millisecond)
 			continue
 		}
 

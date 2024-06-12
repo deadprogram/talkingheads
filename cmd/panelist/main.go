@@ -86,10 +86,21 @@ func RunCLI(version string) error {
 				Name:  "speak",
 				Usage: "just say something",
 			},
-
 			&cli.StringFlag{
 				Name:  "server",
 				Usage: "mqtt server",
+			},
+			&cli.StringFlag{
+				Name:  "tts-engine",
+				Usage: "text to speech engine",
+			},
+			&cli.BoolFlag{
+				Name:  "gpu",
+				Usage: "use GPU for TTS engine",
+			},
+			&cli.StringFlag{
+				Name:  "data",
+				Usage: "data directory for TTS engine",
 			},
 		},
 		Action: func(c *cli.Context) error {
@@ -103,22 +114,40 @@ func RunCLI(version string) error {
 			led = c.String("led")
 
 			if len(port) > 0 {
-				// open serial port
 				sp, _ = serial.Open(port, &serial.Mode{BaudRate: 115200})
 			}
 
-			if keys == "" {
-				return cli.Exit(errors.New("keyfile required. use -k=/path/to/keys.json"), 1)
-			}
+			var t tts.Speaker
+			var format string
 
-			t := tts.NewGoogle(lang, voice)
-			if err := t.Connect(keys); err != nil {
-				return cli.Exit(err, 1)
+			ttsengine := c.String("tts-engine")
+			switch ttsengine {
+			case "google":
+				if keys == "" {
+					return cli.Exit(errors.New("keyfile required. use -k=/path/to/keys.json"), 1)
+				}
+
+				t = tts.NewGoogle(lang, voice)
+				if err := t.Connect(keys); err != nil {
+					return cli.Exit(err, 1)
+				}
+				format = "mp3"
+			case "piper":
+				t = tts.NewPiper(lang, voice)
+				if err := t.Connect(c.String("data")); err != nil {
+					return cli.Exit(err, 1)
+				}
+				if c.Bool("gpu") {
+					t.(*tts.Piper).UseGPU(true)
+				}
+				format = "wav"
+			default:
+				return cli.Exit(errors.New("tts-engine required. use -tts-engine=google or -tts-engine=piper"), 1)
 			}
 
 			defer t.Close()
 
-			p := say.NewPlayer()
+			p := say.NewPlayer(format)
 			defer p.Close()
 
 			if c.String("speak") != "" {
@@ -136,7 +165,7 @@ func RunCLI(version string) error {
 
 			var seedPrompt, seedQuestion, seedResponse string
 			switch model {
-			case "llama2":
+			case "llama3":
 				seedPrompt = llamaSeedPrompt
 				seedQuestion = llamaQuestionPrompt
 				seedResponse = llamaResponsePrompt

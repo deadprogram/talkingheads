@@ -3,6 +3,7 @@ package llm
 import (
 	"context"
 	"log"
+	"regexp"
 
 	"github.com/tmc/langchaingo/llms"
 	"github.com/tmc/langchaingo/llms/ollama"
@@ -72,12 +73,12 @@ func (l *LLM) Stream(ctx context.Context, questions chan llms.HumanChatMessage, 
 			return ctx.Err()
 		case question := <-questions:
 			historyMessages, _ := l.history.Messages(ctx)
-			prompt, _ := promptTmpl.FormatPrompt(map[string]any{
+			promptMsgs, _ := promptTmpl.FormatMessages(map[string]any{
 				"historyMessages": historyMessages,
 				"question":        question.GetContent(),
 			})
 
-			mc := chatMessagesToMessageContent(prompt.Messages())
+			mc := chatMessagesToMessageContent(promptMsgs)
 
 			response, err := l.model.GenerateContent(ctx, mc,
 				llms.WithStreamingFunc(func(_ context.Context, chunk []byte) error {
@@ -87,7 +88,7 @@ func (l *LLM) Stream(ctx context.Context, questions chan llms.HumanChatMessage, 
 					default:
 						if len(chunk) == 0 {
 							// send the full reply
-							replyChunks <- buf.String()
+							replyChunks <- removeEmoji(buf.String())
 							buf.Reset()
 							return nil
 						}
@@ -95,7 +96,7 @@ func (l *LLM) Stream(ctx context.Context, questions chan llms.HumanChatMessage, 
 						_, err := buf.Write(chunk)
 						if err != nil {
 							if err == ErrBufferFull {
-								replyChunks <- buf.String()
+								replyChunks <- removeEmoji(buf.String())
 								buf.Reset()
 								// NOTE: flush resets the buffer and we need
 								// to write the remaining chunks to it which
@@ -111,7 +112,7 @@ func (l *LLM) Stream(ctx context.Context, questions chan llms.HumanChatMessage, 
 						// does the last token end in a period? if so, send the sentence.
 						if chunk[len(chunk)-1] == '.' {
 							// send the full reply
-							replyChunks <- buf.String()
+							replyChunks <- removeEmoji(buf.String())
 							buf.Reset()
 						}
 
@@ -124,7 +125,7 @@ func (l *LLM) Stream(ctx context.Context, questions chan llms.HumanChatMessage, 
 
 			l.history.AddMessage(ctx, question)
 			for _, r := range response.Choices {
-				aiMsg := llms.AIChatMessage{Content: r.Content}
+				aiMsg := llms.AIChatMessage{Content: removeEmoji(r.Content)}
 				l.history.AddMessage(ctx, aiMsg)
 				if replies != nil {
 					replies <- aiMsg
@@ -141,40 +142,57 @@ func (l *LLM) Stream(ctx context.Context, questions chan llms.HumanChatMessage, 
 func chatMessagesToMessageContent(chat []llms.ChatMessage) []llms.MessageContent {
 	mcs := make([]llms.MessageContent, len(chat))
 	for i, msg := range chat {
-		role := msg.GetType()
-		text := msg.GetContent()
-
-		var mc llms.MessageContent
-
-		switch p := msg.(type) {
-		case llms.ToolChatMessage:
-			mc = llms.MessageContent{
-				Role: role,
-				Parts: []llms.ContentPart{llms.ToolCallResponse{
-					ToolCallID: p.ID,
-					Content:    p.Content,
-				}},
-			}
-
-		case llms.AIChatMessage:
-			mc = llms.MessageContent{
-				Role: role,
-				Parts: []llms.ContentPart{
-					llms.ToolCall{
-						ID:           p.ToolCalls[0].ID,
-						Type:         p.ToolCalls[0].Type,
-						FunctionCall: p.ToolCalls[0].FunctionCall,
-					},
-				},
-			}
-		default:
-			mc = llms.MessageContent{
-				Role:  role,
-				Parts: []llms.ContentPart{llms.TextContent{Text: text}},
-			}
-		}
-		mcs[i] = mc
+		mcs[i] = chatMessageToMessageContent(msg)
 	}
 
 	return mcs
+}
+
+func chatMessageToMessageContent(msg llms.ChatMessage) llms.MessageContent {
+	role := msg.GetType()
+	text := msg.GetContent()
+
+	switch p := msg.(type) {
+	case llms.ToolChatMessage:
+		return llms.MessageContent{
+			Role: role,
+			Parts: []llms.ContentPart{llms.ToolCallResponse{
+				ToolCallID: p.ID,
+				Content:    p.Content,
+			}},
+		}
+
+	case llms.AIChatMessage:
+		return llms.MessageContent{
+			Role: role,
+			Parts: []llms.ContentPart{
+				llms.TextContent{Text: text},
+				llms.ToolCall{
+					ID:           p.ToolCalls[0].ID,
+					Type:         p.ToolCalls[0].Type,
+					FunctionCall: p.ToolCalls[0].FunctionCall,
+				},
+			},
+		}
+
+	case llms.GenericChatMessage:
+		return llms.MessageContent{
+			Role:  role,
+			Parts: []llms.ContentPart{llms.TextContent{Text: p.Name + ": " + text}},
+		}
+
+	default:
+		return llms.MessageContent{
+			Role:  role,
+			Parts: []llms.ContentPart{llms.TextContent{Text: text}},
+		}
+	}
+}
+
+func removeEmoji(str string) string {
+	// Regex pattern to match most emoji characters
+	emojiPattern := "[\U0001F600-\U0001F64F\U0001F300-\U0001F5FF\U0001F680-\U0001F6FF\U0001F700-\U0001F77F\U0001F780-\U0001F7FF\U0001F800-\U0001F8FF\U0001F900-\U0001F9FF\U00002702-\U000027B0\U000024C2-\U0001F251]+"
+	re := regexp.MustCompile(emojiPattern)
+	// Replace matched emoji with an empty string to remove it
+	return re.ReplaceAllString(str, "")
 }

@@ -4,7 +4,7 @@ go 1.22.0
 
 require (
 	github.com/eclipse/paho.mqtt.golang v1.4.3
-	github.com/hybridgroup/go-sayanything v0.0.0-20230418172150-a2d88634dc44
+	github.com/hybridgroup/go-sayanything v0.0.0-20240612142303-20a80305bf1e
 	github.com/tmc/langchaingo v0.1.10
 	github.com/urfave/cli/v2 v2.25.1
 	go.bug.st/serial v1.5.0
@@ -24,6 +24,9 @@ require (
 	github.com/dlclark/regexp2 v1.10.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
+	github.com/go-audio/audio v1.0.0 // indirect
+	github.com/go-audio/riff v1.0.0 // indirect
+	github.com/go-audio/wav v1.1.0 // indirect
 	github.com/go-logr/logr v1.4.1 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
