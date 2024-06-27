@@ -7,7 +7,7 @@ Stop making sense...
 Start ollama
 
 ```shell
-docker run --gpus=all -d -v ${HOME}/.ollama:/root/.ollama -p 11434:11434 --name ollama ollama/ollama
+docker run --gpus=all -d -v ${HOME}/.ollama:/root/.ollama -v ${HOME}/ollama-import:/root/ollama-import -p 11434:11434 --name ollama ollama/ollama
 ```
 
 Stop ollama
@@ -22,18 +22,102 @@ Subsequent starts
 docker start ollama
 ```
 
+### Models
+
 Download models
 
 ```shell
 docker exec ollama ollama run llama3
 docker exec ollama ollama run phi3
 docker exec ollama ollama run gemma
+
+docker exec ollama ollama run rjmalagon/dolphin-2.9.3-qwen2-1.5b-f16
+
+docker exec ollama ollama run openhermes
+
+docker exec ollama ollama run wizardlm:7b-q4_K_S
 ```
+
+### Importing models
+
+```shell
+docker exec ollama ollama create "Phi-3-mini-128k-instruct-abliterated-v3_q8" -f phi3-mini-modelfile
+```
+
+Uncensored models
+
+https://huggingface.co/Orenguteng/Llama-3-8B-Lexi-Uncensored-GGUF
+
+```
+FROM /root/ollama-import/Lexi-Llama-3-8B-Uncensored_Q4_K_M.gguf
+TEMPLATE "
+{{ if .System }}<|start_header_id|>system<|end_header_id|>
+{{ .System }}<|eot_id|>{{ end }}{{ if .Prompt }}<|start_header_id|>user<|end_header_id|>
+{{ .Prompt }}<|eot_id|>{{ end }}<|start_header_id|>assistant<|end_header_id|>
+{{ .Response }}<|eot_id|>
+"
+PARAMETER num_keep 24
+PARAMETER stop <|start_header_id|>
+PARAMETER stop <|end_header_id|>
+PARAMETER stop <|eot_id|>
+```
+
+https://huggingface.co/bartowski/dolphin-2.9.2-Phi-3-Medium-abliterated-GGUF
+
+
+```
+FROM /root/ollama-import/dolphin-2.9.2-Phi-3-Medium-abliterated-IQ4_XS.gguf
+
+TEMPLATE """<|im_start|>system
+{{ .System }}<|im_end|>
+<|im_start|>user
+{{ .Prompt }}<|im_end|>
+<|im_start|>assistant
+"""
+
+PARAMETER stop "<|im_start|>"
+PARAMETER stop "<|im_end|>"
+```
+
+https://huggingface.co/failspy/Phi-3-mini-128k-instruct-abliterated-v3-GGUF/blob/main/Phi-3-mini-128k-instruct-abliterated-v3_q8.gguf
+
+```
+FROM /root/ollama-import/Phi-3-mini-128k-instruct-abliterated-v3_q8.gguf
+
+TEMPLATE """<|im_start|>system
+{{ .System }}<|im_end|>
+<|im_start|>user
+{{ .Prompt }}<|im_end|>
+<|im_start|>assistant
+"""
+
+PARAMETER stop "<|im_start|>"
+PARAMETER stop "<|im_end|>"
+```
+
+
+https://huggingface.co/bartowski/WizardLM-2-7B-abliterated-GGUF
+
+
+```
+FROM /root/ollama-import/WizardLM-2-7B-abliterated-Q4_K_M.gguf
+
+TEMPLATE """<|im_start|>system
+{{ .System }}<|im_end|>
+<|im_start|>user
+{{ .Prompt }}<|im_end|>
+<|im_start|>assistant
+"""
+
+PARAMETER stop "<|im_start|>"
+PARAMETER stop "<|im_end|>"
+```
+
 
 ## MQTT broker
 
 ```shell
-docker run --network host eclipse-mosquitto
+docker run -d --network host eclipse-mosquitto
 ```
 
 ## TTS Engine
@@ -51,8 +135,14 @@ cd cmd
 go run ./panelist/ -l="en-US" -voice="hfc_female-medium" -data="../voices" -tts-engine="piper" -model="llama3" -name="llama" -server="localhost:1883"
 ```
 
+```shell
+cd cmd
+go run ./panelist/ -l="en-US" -voice="hfc_female-medium" -data="../voices" -tts-engine="piper" -speak="Hello, there!"
+```
+
 ## Moderator
 
 ```shell
 go run ./moderator/ -server="localhost:1883"
 ```
+

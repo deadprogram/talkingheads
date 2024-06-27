@@ -5,12 +5,15 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"slices"
 	"strings"
 	"time"
 )
 
+var panelists = []string{"llama", "phi", "gemma", "mistral", "qwen"}
+
 func startKeyboardInput(questions chan question) error {
-	fmt.Println("Enter a question for a panelist (llama, phi, gemma):")
+	displayQuestion()
 
 	scanner := bufio.NewScanner(os.Stdin)
 	for scanner.Scan() {
@@ -20,20 +23,18 @@ func startKeyboardInput(questions chan question) error {
 			continue
 		}
 
-		var to, query string
+		var query string
+		first := strings.Split(text, " ")[0]
+		to := strings.TrimSuffix(first, ":")
+		to = strings.TrimSuffix(to, ",")
+		to = strings.ToLower(to)
 
 		switch {
-		case strings.HasPrefix(text, "llama:"):
-			to = "llama"
-			query = strings.TrimPrefix(text, "llama:")
-		case strings.HasPrefix(text, "phi:"):
-			to = "phi"
-			query = strings.TrimPrefix(text, "phi:")
-		case strings.HasPrefix(text, "gemma:"):
-			to = "gemma"
-			query = strings.TrimPrefix(text, "gemma:")
+		case slices.Contains(panelists, to):
+			query = strings.TrimPrefix(text, first)
+			displayQuestion()
 		default:
-			fmt.Println("unknown recipient")
+			fmt.Println("unknown panelist. try again:", panelists)
 			continue
 		}
 
@@ -45,4 +46,8 @@ func startKeyboardInput(questions chan question) error {
 	}
 
 	return nil
+}
+
+func displayQuestion() {
+	fmt.Printf("Enter a question for a panelist %v:\n", panelists)
 }
