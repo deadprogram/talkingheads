@@ -17,4 +17,4 @@ windows:
           - go run ./panelist/ -l="en-US" -voice="hfc_male-medium" -data="../voices" -tts-engine="piper" -gpu=true -model="Phi-3-mini-128k-instruct-abliterated-v3_q4" -name="phi" -server="localhost:1883"
         - qwen:
           - cd ./cmd
-          - go run ./panelist/ -l="en-US" -voice="john-medium" -data="../voices" -tts-engine="piper" -gpu=true -model="rjmalagon/dolphin-2.9.3-qwen2-1.5b-f16" -name="qwen" -server="localhost:1883"
+          - go run ./panelist/ -l="en-US" -voice="danny-low" -data="../voices" -tts-engine="piper" -gpu=true -model="rjmalagon/dolphin-2.9.3-qwen2-1.5b-f16" -name="qwen" -server="localhost:1883"
