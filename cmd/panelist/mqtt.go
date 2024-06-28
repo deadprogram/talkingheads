@@ -16,9 +16,10 @@ type mqttInput struct {
 	questions chan llms.HumanChatMessage
 	speaking  chan string
 	others    chan llms.GenericChatMessage
+	listening chan string
 }
 
-func startMQTT(name, server string, questions chan llms.HumanChatMessage, speaking chan string, replies chan llms.AIChatMessage, others chan llms.GenericChatMessage) error {
+func startMQTT(name, server string, questions chan llms.HumanChatMessage, speaking chan string, replies chan llms.AIChatMessage, others chan llms.GenericChatMessage, listening chan string) error {
 	options := mqtt.NewClientOptions()
 	options.AddBroker(server)
 	options.SetClientID(name)
@@ -37,6 +38,7 @@ func startMQTT(name, server string, questions chan llms.HumanChatMessage, speaki
 		questions: questions,
 		speaking:  speaking,
 		others:    others,
+		listening: listening,
 	}
 
 	speak := "speak/" + name
@@ -114,5 +116,6 @@ func (m *mqttInput) handleResponse(client mqtt.Client, msg mqtt.Message) {
 		return
 	}
 
+	m.listening <- from
 	m.others <- llms.GenericChatMessage{Content: response.Content, Name: from, Role: "Panelist"}
 }

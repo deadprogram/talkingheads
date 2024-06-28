@@ -7,7 +7,7 @@ Stop making sense...
 Start ollama
 
 ```shell
-docker run --gpus=all -d -v ${HOME}/.ollama:/root/.ollama -v ${HOME}/ollama-import:/root/ollama-import -p 11434:11434 --name ollama ollama/ollama
+docker run --gpus=all -d -v ${HOME}/.ollama:/root/.ollama -v ${HOME}/ollama-import:/root/ollama-import -p 11434:11434 --name ollama ollama/ollama:latest
 ```
 
 Stop ollama
@@ -29,7 +29,7 @@ Download models
 ```shell
 docker exec ollama ollama run llama3
 docker exec ollama ollama run phi3
-docker exec ollama ollama run gemma
+docker exec ollama ollama run gemma2
 
 docker exec ollama ollama run rjmalagon/dolphin-2.9.3-qwen2-1.5b-f16
 

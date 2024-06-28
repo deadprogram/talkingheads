@@ -90,6 +90,7 @@ func RunCLI(version string) error {
 			questions := make(chan llms.HumanChatMessage, 1)
 			speaking := make(chan string, 1)
 			others := make(chan llms.GenericChatMessage, 1)
+			listening := make(chan string, 1)
 
 			var replies chan llms.AIChatMessage
 			if c.String("server") != "" {
@@ -102,7 +103,7 @@ func RunCLI(version string) error {
 				seedPrompt = llamaSeedPrompt
 				seedQuestion = llamaQuestionPrompt
 				seedResponse = llamaResponsePrompt
-			case "gemma":
+			case "gemma", "gemma2":
 				seedPrompt = gemmaSeedPrompt
 				seedQuestion = gemmaQuestionPrompt
 				seedResponse = gemmaResponsePrompt
@@ -135,12 +136,12 @@ func RunCLI(version string) error {
 			}
 
 			go l.Stream(context.Background(), questions, speaking, replies, others)
-			go StartSayingAnything(t, p, speaking)
+			go StartSayingAnything(t, p, speaking, listening)
 
 			speaking <- name + " ready."
 
 			if c.String("server") != "" {
-				go startMQTT(name, c.String("server"), questions, speaking, replies, others)
+				go startMQTT(name, c.String("server"), questions, speaking, replies, others, listening)
 
 				select {
 				case <-context.Background().Done():

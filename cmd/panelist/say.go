@@ -7,15 +7,17 @@ import (
 	"github.com/hybridgroup/go-sayanything/pkg/tts"
 )
 
-func StartSayingAnything(t tts.Speaker, p *say.Player, responses chan string) error {
-	for text := range responses {
-		err := SayAnything(t, p, text)
-		if err != nil {
-			return err
+func StartSayingAnything(t tts.Speaker, p *say.Player, responses chan string, listening chan string) error {
+	for {
+		select {
+		case text := <-responses:
+			if err := SayAnything(t, p, text); err != nil {
+				return err
+			}
+		case who := <-listening:
+			Listen(who)
 		}
 	}
-
-	return nil
 }
 
 var speaking = 0
@@ -78,6 +80,26 @@ func SayAnythingOnce(t tts.Speaker, p *say.Player, text string) error {
 	}
 
 	return nil
+}
+
+func Listen(who string) {
+	if sp == nil {
+		return
+	}
+
+	switch name {
+	case "llama":
+		sp.Write([]byte("right\r"))
+	case "phi":
+		switch who {
+		case "llama":
+			sp.Write([]byte("left\r"))
+		default:
+			sp.Write([]byte("right\r"))
+		}
+	default:
+		sp.Write([]byte("left\r"))
+	}
 }
 
 func cleanupText(text, cleanup string) string {
