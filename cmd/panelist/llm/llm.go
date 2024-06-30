@@ -62,9 +62,6 @@ func (l *LLM) Stream(ctx context.Context, questions chan llms.HumanChatMessage, 
 		),
 	})
 
-	// l.history.AddUserMessage(ctx, l.config.InitialQuestion)
-	// l.history.AddAIMessage(ctx, l.config.InitialResponse)
-
 	buf := NewFixedSizeBuffer(MaxTTSBufferSize)
 
 	for {

@@ -30,12 +30,6 @@ Download models
 docker exec ollama ollama run llama3
 docker exec ollama ollama run phi3
 docker exec ollama ollama run gemma2
-
-docker exec ollama ollama run rjmalagon/dolphin-2.9.3-qwen2-1.5b-f16
-
-docker exec ollama ollama run openhermes
-
-docker exec ollama ollama run wizardlm:7b-q4_K_S
 ```
 
 ### Importing models
@@ -62,23 +56,6 @@ PARAMETER stop <|end_header_id|>
 PARAMETER stop <|eot_id|>
 ```
 
-https://huggingface.co/bartowski/dolphin-2.9.2-Phi-3-Medium-abliterated-GGUF
-
-
-```
-FROM /root/ollama-import/dolphin-2.9.2-Phi-3-Medium-abliterated-IQ4_XS.gguf
-
-TEMPLATE """<|im_start|>system
-{{ .System }}<|im_end|>
-<|im_start|>user
-{{ .Prompt }}<|im_end|>
-<|im_start|>assistant
-"""
-
-PARAMETER stop "<|im_start|>"
-PARAMETER stop "<|im_end|>"
-```
-
 https://huggingface.co/failspy/Phi-3-mini-128k-instruct-abliterated-v3-GGUF/blob/main/Phi-3-mini-128k-instruct-abliterated-v3_q8.gguf
 
 ```
@@ -94,25 +71,6 @@ TEMPLATE """<|im_start|>system
 PARAMETER stop "<|im_start|>"
 PARAMETER stop "<|im_end|>"
 ```
-
-
-https://huggingface.co/bartowski/WizardLM-2-7B-abliterated-GGUF
-
-
-```
-FROM /root/ollama-import/WizardLM-2-7B-abliterated-Q4_K_M.gguf
-
-TEMPLATE """<|im_start|>system
-{{ .System }}<|im_end|>
-<|im_start|>user
-{{ .Prompt }}<|im_end|>
-<|im_start|>assistant
-"""
-
-PARAMETER stop "<|im_start|>"
-PARAMETER stop "<|im_end|>"
-```
-
 
 ## MQTT broker
 
@@ -146,3 +104,8 @@ go run ./panelist/ -l="en-US" -voice="hfc_female-medium" -data="../voices" -tts-
 go run ./moderator/ -server="localhost:1883"
 ```
 
+## Starting everything
+
+```shell
+tmuxinator
+```

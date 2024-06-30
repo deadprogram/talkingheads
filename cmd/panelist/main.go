@@ -101,24 +101,10 @@ func RunCLI(version string) error {
 			switch model {
 			case "llama3", "Lexi-Llama-3-8B-Uncensored_Q4_K_M":
 				seedPrompt = llamaSeedPrompt
-				seedQuestion = llamaQuestionPrompt
-				seedResponse = llamaResponsePrompt
 			case "gemma", "gemma2":
 				seedPrompt = gemmaSeedPrompt
-				seedQuestion = gemmaQuestionPrompt
-				seedResponse = gemmaResponsePrompt
 			case "phi3", "dolphin-2.9.2-Phi-3-Medium-abliterated-IQ4_XS", "Phi-3-mini-128k-instruct-abliterated-v3_q4":
 				seedPrompt = phiSeedPrompt
-				seedQuestion = phiQuestionPrompt
-				seedResponse = phiResponsePrompt
-			case "mistral", "spooknik/hermes-2-pro-mistral-7b:q4_k_s", "openhermes", "dolphin-mistral":
-				seedPrompt = mistralSeedPrompt
-				seedQuestion = mistralQuestionPrompt
-				seedResponse = mistralResponsePrompt
-			case "rjmalagon/dolphin-2.9.3-qwen2-1.5b-f16":
-				seedPrompt = qwenSeedPrompt
-				seedQuestion = qwenQuestionPrompt
-				seedResponse = qwenResponsePrompt
 			default:
 				log.Fatal("failed creating LLM model: ", model)
 			}

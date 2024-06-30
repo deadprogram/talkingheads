@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-var panelists = []string{"llama", "phi", "gemma", "mistral", "qwen"}
+var panelists = []string{"llama3000", "phineas", "gemmai"}
 
 func startKeyboardInput(questions chan question) error {
 	displayQuestion()
