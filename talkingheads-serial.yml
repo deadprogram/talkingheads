@@ -1,0 +1,20 @@
+project_name: talkingheads-serial
+
+pre_window: gvm use go1.22.4
+
+windows:
+  - main:
+      layout: main-horizontal
+      panes:
+        - moderator:
+          - cd ./cmd
+          - go run ./moderator/ -server="localhost:1883"
+        - llama:
+          - cd ./cmd
+          - go run ./panelist/ -l="en-US" -voice="joe-medium" -data="../voices" -tts-engine="piper" -gpu=true -model="Lexi-Llama-3-8B-Uncensored_Q4_K_M" -name="llama3000" -server="localhost:1883" -port="/dev/ttyACM0" -led="talk3"
+        - phi:
+          - cd ./cmd
+          - go run ./panelist/ -l="en-US" -voice="hfc_male-medium" -data="../voices" -tts-engine="piper" -gpu=true -model="Phi-3-mini-128k-instruct-abliterated-v3_q4" -name="phineas" -server="localhost:1883" -port="/dev/ttyACM1" -led="talk2"
+        - gemma:
+          - cd ./cmd
+          - go run ./panelist/ -l="en-US" -voice="hfc_female-medium" -data="../voices" -tts-engine="piper" -gpu=true -model="gemma2" -name="gemmai" -server="localhost:1883" -port="/dev/ttyACM2" -led="talk1"

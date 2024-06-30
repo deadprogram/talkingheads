@@ -21,6 +21,7 @@ var (
 	head     = NewHeadLED()
 	svo      servo.Servo
 	position string
+	angle    int
 )
 
 func main() {
@@ -78,7 +79,7 @@ func lights() {
 			head.Off()
 		}
 
-		time.Sleep(200 * time.Millisecond)
+		time.Sleep(100 * time.Millisecond)
 	}
 }
 
@@ -91,29 +92,53 @@ func motion() {
 			break
 		case "left":
 			if position != "left" {
-				svo.SetAngle(75)
+				svo.SetAngle(randomInt(110, 140))
 				position = "left"
 			}
 		case "right":
 			if position != "right" {
-				svo.SetAngle(115)
+				svo.SetAngle(randomInt(40, 70))
 				position = "right"
 			}
+		case "talk", "talk1", "talk2", "talk3":
+			angle = movement(angle, randomInt(50, 130))
+			svo.SetAngle(angle)
+			position = "random"
 		case "stop":
 			if position != "center" {
 				svo.SetAngle(90)
 				position = "center"
 			}
 		default:
-			svo.SetAngle(randomInt(50, 130))
-			position = "random"
+			if position != "center" {
+				svo.SetAngle(90)
+				position = "center"
+			}
 		}
 
-		time.Sleep(1500 * time.Millisecond)
+		time.Sleep(200 * time.Millisecond)
 	}
 }
 
 // Returns an int >= min, < max
 func randomInt(min, max int) int {
 	return min + rand.Intn(max-min)
+}
+
+const maxMovement = 15
+
+// keep movement to maxMovement degrees at time
+func movement(current, target int) int {
+	if current < target {
+		if target-current > maxMovement {
+			return current + maxMovement
+		}
+		return target
+	} else if current > target {
+		if current-target > maxMovement {
+			return current - maxMovement
+		}
+		return target
+	}
+	return current
 }

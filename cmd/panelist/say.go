@@ -58,6 +58,8 @@ func SayAnythingOnce(t tts.Speaker, p *say.Player, text string) error {
 		return nil
 	}
 
+	// just in case the name is left in the text
+	text = strings.TrimPrefix(strings.TrimSpace(text), name+":")
 	println(text)
 
 	data, err := t.Speech(text)
@@ -88,24 +90,18 @@ func Listen(who string) {
 	}
 
 	switch name {
-	case "llama":
-		sp.Write([]byte("right\r"))
-	case "phi":
+	case "llama3000":
+		// servo is reversed?
+		sp.Write([]byte("left\r"))
+	case "phineas":
 		switch who {
-		case "llama":
+		case "llama3000":
 			sp.Write([]byte("left\r"))
 		default:
 			sp.Write([]byte("right\r"))
 		}
 	default:
-		sp.Write([]byte("left\r"))
+		// servo is reversed?
+		sp.Write([]byte("right\r"))
 	}
-}
-
-func cleanupText(text, cleanup string) string {
-	if strings.Contains(text, cleanup) {
-		return strings.ReplaceAll(text, cleanup, "")
-	}
-
-	return text
 }

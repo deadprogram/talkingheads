@@ -103,7 +103,7 @@ func RunCLI(version string) error {
 				seedPrompt = llamaSeedPrompt
 			case "gemma", "gemma2":
 				seedPrompt = gemmaSeedPrompt
-			case "phi3", "dolphin-2.9.2-Phi-3-Medium-abliterated-IQ4_XS", "Phi-3-mini-128k-instruct-abliterated-v3_q4":
+			case "phi3", "dolphin-2.9.2-Phi-3-Medium-abliterated-IQ4_XS", "Phi-3-mini-128k-instruct-abliterated-v3_q4", "dagbs/dolphin-2.9.2-phi-3-medium:iq3_xxs":
 				seedPrompt = phiSeedPrompt
 			default:
 				log.Fatal("failed creating LLM model: ", model)

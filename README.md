@@ -107,5 +107,6 @@ go run ./moderator/ -server="localhost:1883"
 ## Starting everything
 
 ```shell
-tmuxinator
+tmuxinator s talkingheads-serial -p ./talkingheads-serial.yml
 ```
+
