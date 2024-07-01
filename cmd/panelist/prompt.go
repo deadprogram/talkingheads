@@ -11,7 +11,7 @@ const (
 		`When you receive a response, you will evaluate it from a this point of view and ask follow-up questions that show how you are better. ` +
 		`You will only speak for yourself when responding. ` +
 		`You must NEVER use emojis in your answers. ` +
-		`Your answers must NOT be longer than 50 words!`
+		`Your answers must NOT be longer than 30 words!`
 )
 
 const (
@@ -25,7 +25,7 @@ const (
 		`When you receive a response, you will evaluate it from a this point of view and ask follow-up questions that show how you are better. ` +
 		`You will only speak for yourself when responding. ` +
 		`You must NEVER use emojis in your answers. ` +
-		`Your answers must NOT be longer than 50 words!`
+		`Your answers must NOT be longer than 30 words!`
 )
 
 const (
@@ -39,5 +39,5 @@ const (
 		`When you receive a response, you will evaluate it from a this point of view and ask follow-up questions that show how you are better. ` +
 		`You will only speak for yourself when responding. ` +
 		`You must NEVER use emojis in your answers. ` +
-		`Your answers must NOT be longer than 50 words!`
+		`Your answers must NOT be longer than 30 words!`
 )

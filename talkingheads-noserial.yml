@@ -14,7 +14,7 @@ windows:
           - go run ./panelist/ -l="en-US" -voice="joe-medium" -data="../voices" -tts-engine="piper" -gpu=true -model="Lexi-Llama-3-8B-Uncensored_Q4_K_M" -name="llama3000" -server="localhost:1883"
         - phi:
           - cd ./cmd
-          - go run ./panelist/ -l="en-US" -voice="hfc_male-medium" -data="../voices" -tts-engine="piper" -gpu=true -model="Phi-3-mini-128k-instruct-abliterated-v3_q4" -name="phineas" -server="localhost:1883"
+          - go run ./panelist/ -l="en-US" -voice="hfc_male-medium" -data="../voices" -tts-engine="piper" -gpu=true -model="dagbs/dolphin-2.9.2-phi-3-medium:iq3_xxs" -name="phineas" -server="localhost:1883"
         - gemma:
           - cd ./cmd
           - go run ./panelist/ -l="en-US" -voice="hfc_female-medium" -data="../voices" -tts-engine="piper" -gpu=true -model="gemma2" -name="gemmai" -server="localhost:1883"
