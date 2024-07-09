@@ -107,6 +107,8 @@ go run ./moderator/ -server="localhost:1883"
 ## Starting everything
 
 ```shell
+docker start ollama
+docker run -d --network host eclipse-mosquitto
 tmuxinator s talkingheads-serial -p ./talkingheads-serial.yml
 ```
 
