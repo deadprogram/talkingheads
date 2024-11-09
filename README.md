@@ -2,13 +2,13 @@
 
 ![](./images/gophercon-2024-talking-heads.jpg)
 
-Demonstration from opening keynote at Gophercon 2024.
+A Fantastical Panel Discussion Between Machines From The Future
 
 ## Starting everything
 
 ```shell
 ./start.sh
-tmuxinator s talkingheads-serial -p ./talkingheads-serial.yml
+tmuxinator s talkingheads -p ./talkingheads-serial.yml
 ```
 
 ## Architecture
@@ -131,7 +131,7 @@ Download models
 
 ```shell
 docker exec ollama ollama run llama3
-docker exec ollama ollama run phi3
+docker exec ollama ollama run superdrew100/phi3-medium-abliterated
 docker exec ollama ollama run gemma2
 ```
 

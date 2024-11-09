@@ -94,25 +94,31 @@ func motion() {
 			if position != "left" {
 				svo.SetAngle(randomInt(110, 140))
 				position = "left"
+				machine.A1.Low()
 			}
 		case "right":
 			if position != "right" {
 				svo.SetAngle(randomInt(40, 70))
 				position = "right"
+				machine.A1.Low()
 			}
 		case "talk", "talk1", "talk2", "talk3":
 			angle = movement(angle, randomInt(50, 130))
 			svo.SetAngle(angle)
 			position = "random"
+			machine.A1.Low()
 		case "stop":
 			if position != "center" {
 				svo.SetAngle(90)
 				position = "center"
+				machine.A1.Low()
+				machine.A1.Low()
 			}
 		default:
 			if position != "center" {
 				svo.SetAngle(90)
 				position = "center"
+				machine.A1.Low()
 			}
 		}
 
