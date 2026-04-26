@@ -1,8 +1,8 @@
-module github.com/deadprogram/talkingheads/cmd
+module github.com/deadprogram/talkingheads/cmd/moderator
 
 go 1.26.0
 
-replace github.com/tmc/langchaingo => github.com/treywelsh/langchaingo v0.0.0-20241010141243-207810224be9
+replace github.com/deadprogram/talkingheads => ../..
 
 require (
 	github.com/deadprogram/talkingheads v0.0.0
@@ -24,6 +24,4 @@ require (
 	golang.org/x/term v0.42.0 // indirect
 )
 
-replace github.com/deadprogram/talkingheads => /home/ron/Development/talkingheads
-
-replace github.com/ggerganov/whisper.cpp/bindings/go => ../lib/whisper.cpp/bindings/go
+replace github.com/ggerganov/whisper.cpp/bindings/go => ../../lib/whisper.cpp/bindings/go

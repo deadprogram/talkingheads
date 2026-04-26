@@ -37,10 +37,10 @@ export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$WHISPER_DIR
 export CGO_LDFLAGS="-L$WHISPER_DIR -lwhisper -lggml -lm -lstdc++"
 ```
 
-Then from the `cmd/` directory:
+Then from the `cmd/moderator` directory:
 
 ```sh
-go build -o moderator ./moderator/...
+go build -o ../../build/moderator .
 ```
 
 See [pkg/hotmic/README.md](../../pkg/hotmic/README.md) for full instructions on building whisper.cpp from source and downloading a model.
