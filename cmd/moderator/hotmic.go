@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
 	"strings"
 
 	"github.com/deadprogram/talkingheads/pkg/hotmic"
@@ -38,7 +37,7 @@ func startHotMicInput(ctx context.Context, questions chan question, modelPath, l
 		// '?', or '.'.
 		idx := strings.IndexAny(text, ":,?.")
 		if idx < 0 {
-			log.Printf("hotmic: no panelist separator in %q", text)
+			fmt.Printf("\rhotmic: no panelist separator in %q\r\n", text)
 			continue
 		}
 		nameRaw := strings.TrimSpace(text[:idx])
@@ -46,9 +45,11 @@ func startHotMicInput(ctx context.Context, questions chan question, modelPath, l
 
 		to, ok := matchPanelist(nameRaw)
 		if !ok {
-			log.Printf("hotmic: unknown panelist %q in %q — expected one of %v", nameRaw, text, panelists)
+			fmt.Printf("\rhotmic: unknown panelist %q in %q — expected one of %v\r\n", nameRaw, text, panelists)
 			continue
 		}
+
+		fmt.Printf("\rhotmic: got question for %s: %q\r\n", to, content)
 
 		select {
 		case questions <- question{To: to, Content: content}:
