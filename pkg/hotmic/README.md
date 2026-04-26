@@ -34,30 +34,30 @@ brew install portaudio
 The Go module uses a `replace` directive pointing at a local whisper.cpp checkout because the published module does not bundle the required C libraries. You need to build `libwhisper.a` yourself:
 
 ```sh
-git clone https://github.com/ggml-org/whisper.cpp.git ~/Development/whisper.cpp
-cd ~/Development/whisper.cpp
-cmake -B build -DBUILD_SHARED_LIBS=OFF
+git submodule update --init lib/whisper.cpp
+cd lib/whisper.cpp
+cmake -B build -DBUILD_SHARED_LIBS=OFF -DGGML_OPENMP=OFF -DWHISPER_BUILD_TESTS=OFF -DWHISPER_BUILD_EXAMPLES=OFF
 cmake --build build --config Release -j$(nproc)
 # The resulting static libraries are written to the repo root:
 cp build/src/libwhisper.a .
 cp build/ggml/src/libggml.a .
 ```
 
-> **Note:** The `go.mod` in this repository has a `replace` directive that maps
-> `github.com/ggerganov/whisper.cpp/bindings/go` to the local checkout:
+> **Note:** The `go.mod` files in this repository have a `replace` directive that maps
+> `github.com/ggerganov/whisper.cpp/bindings/go` to the submodule:
 > ```
-> replace github.com/ggerganov/whisper.cpp/bindings/go => /home/ron/Development/whisper.cpp/bindings/go
+> replace github.com/ggerganov/whisper.cpp/bindings/go => ./lib/whisper.cpp/bindings/go
 > ```
-> Adjust this path if your clone is in a different location.
+> No manual adjustment is needed as long as you initialised the submodule.
 
 ### 3. A whisper model file
 
 Download any GGML-format model, for example:
 
 ```sh
-cd ~/Development/whisper.cpp
+cd lib/whisper.cpp
 bash models/download-ggml-model.sh base.en
-# Model is saved to models/ggml-base.en.bin
+# Model is saved to lib/whisper.cpp/models/ggml-base.en.bin
 ```
 
 ## Building
@@ -65,30 +65,32 @@ bash models/download-ggml-model.sh base.en
 Because the whisper.cpp bindings use CGo, you must tell the compiler where to find the headers and the static library. Set the following environment variables before `go build` (or export them in your shell profile):
 
 ```sh
-export C_INCLUDE_PATH=/home/ron/Development/whisper.cpp/include:/home/ron/Development/whisper.cpp/ggml/include
-export LIBRARY_PATH=/home/ron/Development/whisper.cpp
+export WHISPER_DIR=$(git rev-parse --show-toplevel)/lib/whisper.cpp
+export C_INCLUDE_PATH=$WHISPER_DIR/include:$WHISPER_DIR/ggml/include
+export LIBRARY_PATH=$WHISPER_DIR
 ```
 
 Then build normally:
 
 ```sh
-CGO_LDFLAGS="-L/home/ron/Development/whisper.cpp -lwhisper -lggml -lm -lstdc++" \
+CGO_LDFLAGS="-L$WHISPER_DIR -lwhisper -lggml -lm -lstdc++" \
 go build ./pkg/hotmic/...
 ```
 
 Or build the whole project:
 
 ```sh
-CGO_LDFLAGS="-L/home/ron/Development/whisper.cpp -lwhisper -lggml -lm -lstdc++" \
+CGO_LDFLAGS="-L$WHISPER_DIR -lwhisper -lggml -lm -lstdc++" \
 go build ./...
 ```
 
 ### One-liner
 
 ```sh
-C_INCLUDE_PATH=/home/ron/Development/whisper.cpp/include:/home/ron/Development/whisper.cpp/ggml/include \
-LIBRARY_PATH=/home/ron/Development/whisper.cpp \
-CGO_LDFLAGS="-L/home/ron/Development/whisper.cpp -lwhisper -lggml -lm -lstdc++" \
+WHISPER_DIR=$(git rev-parse --show-toplevel)/lib/whisper.cpp \
+C_INCLUDE_PATH=$WHISPER_DIR/include:$WHISPER_DIR/ggml/include \
+LIBRARY_PATH=$WHISPER_DIR \
+CGO_LDFLAGS="-L$WHISPER_DIR -lwhisper -lggml -lm -lstdc++" \
 go build ./pkg/hotmic/...
 ```
 
@@ -99,7 +101,7 @@ import "github.com/deadprogram/talkingheads/pkg/hotmic"
 
 mic, err := hotmic.New(hotmic.Options{
     Key:       ' ',                                          // space toggles record on/off
-    ModelPath: "/home/ron/Development/whisper.cpp/models/ggml-base.en.bin",
+    ModelPath: "lib/whisper.cpp/models/ggml-base.en.bin",
     Language:  "en",                                        // or "auto"
 })
 if err != nil {

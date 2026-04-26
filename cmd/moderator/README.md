@@ -31,9 +31,10 @@ Press **Ctrl+C** or **Ctrl+D** to exit.
 Hotmic mode requires the whisper.cpp C library. Set these environment variables before building:
 
 ```sh
-export C_INCLUDE_PATH=/home/ron/Development/whisper.cpp/include:/home/ron/Development/whisper.cpp/ggml/include
-export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/ron/Development/whisper.cpp
-export CGO_LDFLAGS="-L/home/ron/Development/whisper.cpp -lwhisper -lggml -lm -lstdc++"
+export WHISPER_DIR=$(git rev-parse --show-toplevel)/lib/whisper.cpp
+export C_INCLUDE_PATH=$WHISPER_DIR/include:$WHISPER_DIR/ggml/include
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$WHISPER_DIR
+export CGO_LDFLAGS="-L$WHISPER_DIR -lwhisper -lggml -lm -lstdc++"
 ```
 
 Then from the `cmd/` directory:
@@ -57,7 +58,7 @@ Hotmic mode with the base English model, toggled with the space bar:
 ```sh
 ./moderator \
   --server tcp://localhost:1883 \
-  --hotmic-model /home/ron/Development/whisper.cpp/models/ggml-base.en.bin \
+  --hotmic-model lib/whisper.cpp/models/ggml-base.en.bin \
   --hotmic-lang en \
   --hotmic-key " "
 ```

@@ -114,4 +114,4 @@ require (
 	google.golang.org/protobuf v1.36.11 // indirect
 )
 
-replace github.com/ggerganov/whisper.cpp/bindings/go => /home/ron/Development/whisper.cpp/bindings/go
+replace github.com/ggerganov/whisper.cpp/bindings/go => ./lib/whisper.cpp/bindings/go
