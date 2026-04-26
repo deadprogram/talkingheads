@@ -138,3 +138,10 @@ func movement(current, target int) int {
 	}
 	return current
 }
+
+func failure(msg string) {
+	for {
+		println(msg)
+		time.Sleep(1 * time.Second)
+	}
+}

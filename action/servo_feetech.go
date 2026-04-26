@@ -11,20 +11,20 @@ import (
 )
 
 type ServoFeetech struct {
-	feetech.Servo
+	*feetech.Servo
 }
 
 func NewServo() (*ServoFeetech, error) {
-	if err := machine.UART1.Configure(machine.UARTConfig{
+	uart := machine.UART1
+	uart.Configure(machine.UARTConfig{
 		BaudRate: 1000000,
 		TX:       machine.UART_TX_PIN,
 		RX:       machine.UART_RX_PIN,
-	}); err != nil {
-		return nil, err
-	}
+	})
 
+	// Create a new servo transport
 	transport, err := transports.OpenSerial(transports.SerialConfig{
-		Device:   machine.UART1,
+		Device:   uart,
 		BaudRate: 1000000,
 	})
 	if err != nil {
@@ -59,5 +59,6 @@ func calcAngle(angle int) int {
 		angle = 180
 	}
 
-	return angle * 4096 / 180
+	// keep to the middle 512 values of the midpoint.
+	return 1792 + angle*512/180
 }
