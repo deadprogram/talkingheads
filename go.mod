@@ -5,7 +5,10 @@ go 1.26.0
 require (
 	github.com/ardanlabs/kronk v1.23.7
 	github.com/eclipse/paho.mqtt.golang v1.4.3
+	github.com/ggerganov/whisper.cpp/bindings/go v0.0.0-20260420051257-fc674574ca27
+	github.com/gordonklaus/portaudio v0.0.0-20260203164431-765aa7dfa631
 	github.com/hybridgroup/go-sayanything v0.0.0-20240612142303-20a80305bf1e
+	golang.org/x/term v0.42.0
 )
 
 require (
@@ -110,3 +113,5 @@ require (
 	google.golang.org/grpc v1.80.0 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 )
+
+replace github.com/ggerganov/whisper.cpp/bindings/go => /home/ron/Development/whisper.cpp/bindings/go
