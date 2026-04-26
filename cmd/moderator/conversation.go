@@ -1,16 +1,14 @@
 package main
 
 import (
-	"encoding/json"
 	"log"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
-	"github.com/tmc/langchaingo/llms"
 )
 
 type question struct {
-	Content string `json:"content"`
-	To      string `json:"to"`
+	Content string
+	To      string
 }
 
 type conversation struct {
@@ -42,15 +40,9 @@ func newConversation(server string) (*conversation, error) {
 
 func (c *conversation) processQuestions() error {
 	for question := range c.questions {
-		name := question.To
-		discuss := "discuss/" + name
+		topic := "ask/" + question.To
 
-		msg, err := json.Marshal(llms.HumanChatMessage{Content: question.Content})
-		if err != nil {
-			log.Println("failed marshalling message: ", err)
-			return err
-		}
-		token := c.client.Publish(discuss, 0, false, msg)
+		token := c.client.Publish(topic, 0, false, []byte(question.Content))
 		if token.Wait() && token.Error() != nil {
 			log.Fatal("failed publishing to MQTT topic: ", token.Error())
 			return token.Error()
