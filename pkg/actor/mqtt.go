@@ -3,6 +3,7 @@ package actor
 import (
 	"encoding/json"
 	"log"
+	"regexp"
 
 	"github.com/ardanlabs/kronk/sdk/kronk/model"
 	mqtt "github.com/eclipse/paho.mqtt.golang"
@@ -126,6 +127,7 @@ func (l *MQTTListener) MoreFunc() func(*[]model.D) {
 // "speak/<name>" as {"who":"<name>","what":"<content>"}.
 func (l *MQTTListener) OutputFunc() func(string) {
 	return func(content string) {
+		content = removeEmoji(content)
 		payload, err := json.Marshal(struct {
 			Who  string `json:"who"`
 			What string `json:"what"`
@@ -148,4 +150,12 @@ func (l *MQTTListener) OutputFunc() func(string) {
 func (l *MQTTListener) Close() {
 	close(l.done)
 	l.client.Disconnect(250)
+}
+
+func removeEmoji(str string) string {
+	// Regex pattern to match most emoji characters
+	emojiPattern := "[\U0001F600-\U0001F64F\U0001F300-\U0001F5FF\U0001F680-\U0001F6FF\U0001F700-\U0001F77F\U0001F780-\U0001F7FF\U0001F800-\U0001F8FF\U0001F900-\U0001F9FF\U00002702-\U000027B0\U000024C2-\U0001F251]+"
+	re := regexp.MustCompile(emojiPattern)
+	// Replace matched emoji with an empty string to remove it
+	return re.ReplaceAllString(str, "")
 }
