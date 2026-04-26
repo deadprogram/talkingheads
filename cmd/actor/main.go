@@ -41,6 +41,17 @@ func main() {
 				Value:   defaultSystemPrompt,
 				Aliases: []string{"s"},
 			},
+			&cli.StringFlag{
+				Name:    "server",
+				Usage:   "MQTT broker URL (e.g. tcp://localhost:1883); enables MQTT mode",
+				Aliases: []string{"b"},
+			},
+			&cli.StringFlag{
+				Name:    "name",
+				Usage:   "actor name used for MQTT topics ask/<name> and speak/<name>",
+				Value:   "actor",
+				Aliases: []string{"n"},
+			},
 		},
 		Action: run,
 	}
@@ -54,6 +65,8 @@ func run(c *cli.Context) error {
 	modelURL := c.String("model-url")
 	modelPath := c.String("model-path")
 	systemPrompt := c.String("system-prompt")
+	server := c.String("server")
+	name := c.String("name")
 
 	if modelURL == "" && modelPath == "" {
 		return cli.Exit("one of --model-url or --model-path is required", 1)
@@ -78,24 +91,40 @@ func run(c *cli.Context) error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	scanner := bufio.NewScanner(os.Stdin)
+	var moreFunc func(*[]model.D)
+	var outputFunc func(string)
 
-	moreFunc := func(conversation *[]model.D) {
-		fmt.Print("\nYou: ")
-		if !scanner.Scan() {
-			// EOF or signal — signal the actor to stop by returning without appending.
-			stop()
-			return
+	if server != "" {
+		ml, err := actor.NewMQTTListener(name, server)
+		if err != nil {
+			return cli.Exit(fmt.Sprintf("failed to connect to MQTT broker: %v", err), 1)
 		}
-		line := scanner.Text()
-		if line == "" {
-			return
+		defer ml.Close()
+		// Unblock MoreFunc when the context is cancelled.
+		go func() {
+			<-ctx.Done()
+			ml.Close()
+		}()
+		moreFunc = ml.MoreFunc()
+		outputFunc = ml.OutputFunc()
+		log.Printf("MQTT mode: listening on ask/%s, publishing to speak/%s\n", name, name)
+	} else {
+		scanner := bufio.NewScanner(os.Stdin)
+		moreFunc = func(conversation *[]model.D) {
+			fmt.Print("\nYou: ")
+			if !scanner.Scan() {
+				stop()
+				return
+			}
+			line := scanner.Text()
+			if line == "" {
+				return
+			}
+			*conversation = append(*conversation, model.D{"role": "user", "content": line})
 		}
-		*conversation = append(*conversation, model.D{"role": "user", "content": line})
-	}
-
-	outputFunc := func(content string) {
-		fmt.Printf("\nActor: %s\n", content)
+		outputFunc = func(content string) {
+			fmt.Printf("\nActor: %s\n", content)
+		}
 	}
 
 	a, err := actor.NewActor(mp, moreFunc, outputFunc)
