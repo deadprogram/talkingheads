@@ -5,9 +5,6 @@ import (
 	"math/rand"
 
 	"time"
-
-	"github.com/hybridgroup/gopherbot"
-	"tinygo.org/x/drivers/servo"
 )
 
 var (
@@ -17,11 +14,12 @@ var (
 	input = make([]byte, 0, 64)
 	mode  = "off"
 
-	backpack = gopherbot.Backpack()
 	head     = NewHeadLED()
-	svo      servo.Servo
+	svo      ServoDevice
 	position string
 	angle    int
+
+	neoPin = machine.D4
 )
 
 func main() {
@@ -54,28 +52,20 @@ func lights() {
 	for {
 		switch mode {
 		case "green":
-			backpack.Green()
 			head.Green()
 		case "red":
-			backpack.Red()
 			head.Red()
 		case "talk":
-			backpack.Alternate(green, black)
 			head.Alternate(green, blue)
 		case "talk1":
-			backpack.Alternate(green, black)
 			head.Alternate(green, black)
 		case "talk2":
-			backpack.Alternate(blue, black)
 			head.Alternate(blue, red)
 		case "talk3":
-			backpack.Alternate(red, black)
 			head.Alternate(red, black)
 		case "stop":
-			backpack.Off()
 			head.Off()
 		default:
-			backpack.Off()
 			head.Off()
 		}
 
@@ -84,7 +74,7 @@ func lights() {
 }
 
 func motion() {
-	svo, _ = servo.New(machine.TCC0, machine.A1)
+	svo, _ = NewServo()
 
 	for {
 		switch mode {

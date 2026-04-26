@@ -28,7 +28,7 @@ type HeadLED struct {
 
 // NewHeadLED returns a new HeadLED.
 func NewHeadLED() *HeadLED {
-	neo := machine.A3
+	neo := neoPin
 	neo.Configure(machine.PinConfig{Mode: machine.PinOutput})
 	v := ws2812.New(neo)
 
@@ -38,7 +38,7 @@ func NewHeadLED() *HeadLED {
 	}
 }
 
-// Show sets the visor to display the current LED array state.
+// Show sets the head LEDs to display the current LED array state.
 func (v *HeadLED) Show() {
 	v.WriteColors(v.LED)
 }
@@ -48,7 +48,7 @@ func (v *HeadLED) Off() {
 	v.Clear()
 }
 
-// SetColor sets the Visor LEDs to a single color.
+// SetColor sets the head LEDs to a single color.
 func (v *HeadLED) SetColor(color color.RGBA) {
 	for i := range v.LED {
 		v.LED[i] = color
@@ -57,22 +57,22 @@ func (v *HeadLED) SetColor(color color.RGBA) {
 	v.Show()
 }
 
-// Clear clears the visor.
+// Clear clears the head.
 func (v *HeadLED) Clear() {
 	v.SetColor(color.RGBA{R: 0x00, G: 0x00, B: 0x00})
 }
 
-// Red turns all of the Visor LEDs red.
+// Red turns all of the head LEDs red.
 func (v *HeadLED) Red() {
 	v.SetColor(color.RGBA{R: 0xff, G: 0x00, B: 0x00})
 }
 
-// Green turns all of the Visor LEDs green.
+// Green turns all of the head LEDs green.
 func (v *HeadLED) Green() {
 	v.SetColor(color.RGBA{R: 0x00, G: 0xff, B: 0x00})
 }
 
-// Blue turns all of the Visor LEDs blue.
+// Blue turns all of the head LEDs blue.
 func (v *HeadLED) Blue() {
 	v.SetColor(color.RGBA{R: 0x00, G: 0x00, B: 0xff})
 }
@@ -97,7 +97,7 @@ func (v *HeadLED) Xmas() {
 	v.Alternate(color.RGBA{R: 0xff, G: 0x00, B: 0x00}, color.RGBA{R: 0x00, G: 0xff, B: 0x00})
 }
 
-// Cylon visor mode.
+// Cylon head mode.
 func (v *HeadLED) Cylon() {
 	if v.forward {
 		v.pos += 2

@@ -1,10 +1,14 @@
 module github.com/deadprogram/talkingheads/hardware
 
-go 1.20
-
-require github.com/hybridgroup/gopherbot v0.0.0-20220825070320-b471d4cc419d
+go 1.24.4
 
 require (
-	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510 // indirect
-	tinygo.org/x/drivers v0.27.1-0.20240521171622-37675892fa09 // indirect
+	github.com/hipsterbrown/feetech-servo v0.4.3-0.20260425125655-1fff7217f9d8
+	tinygo.org/x/drivers v0.27.1-0.20240521171622-37675892fa09
+)
+
+require (
+	github.com/creack/goselect v0.1.2 // indirect
+	go.bug.st/serial v1.6.4 // indirect
+	golang.org/x/sys v0.19.0 // indirect
 )
