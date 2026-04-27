@@ -154,7 +154,7 @@ func run(c *cli.Context) error {
 		return cli.Exit(fmt.Sprintf("failed to create actor: %v", err), 1)
 	}
 
-	fmt.Println("Actor ready. Type your message and press Enter. Use Ctrl+C or Ctrl+D to quit.")
+	fmt.Println("Actor ready. Use Ctrl+C or Ctrl+D to quit.")
 
 	if err := a.Run(ctx, systemPrompt); err != nil {
 		return cli.Exit(err, 1)

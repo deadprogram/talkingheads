@@ -127,7 +127,12 @@ func (l *MQTTListener) MoreFunc() func(*[]model.D) {
 // "speak/<name>" as {"who":"<name>","what":"<content>"}.
 func (l *MQTTListener) OutputFunc() func(string) {
 	return func(content string) {
+		if len(content) == 0 {
+			return
+		}
+
 		content = removeEmoji(content)
+		content = removeOtherUnwantedChars(content)
 		payload, err := json.Marshal(struct {
 			Who  string `json:"who"`
 			What string `json:"what"`
@@ -157,5 +162,13 @@ func removeEmoji(str string) string {
 	emojiPattern := "[\U0001F600-\U0001F64F\U0001F300-\U0001F5FF\U0001F680-\U0001F6FF\U0001F700-\U0001F77F\U0001F780-\U0001F7FF\U0001F800-\U0001F8FF\U0001F900-\U0001F9FF\U00002702-\U000027B0\U000024C2-\U0001F251]+"
 	re := regexp.MustCompile(emojiPattern)
 	// Replace matched emoji with an empty string to remove it
+	return re.ReplaceAllString(str, "")
+}
+
+func removeOtherUnwantedChars(str string) string {
+	// Regex pattern to match control characters and symbols that cannot be read aloud
+	// (e.g., markdown formatting: *, _, #, `, ~, |, \).
+	unwantedPattern := `[\x00-\x1F\x7F*_#` + "`~|\\\\]+"
+	re := regexp.MustCompile(unwantedPattern)
 	return re.ReplaceAllString(str, "")
 }

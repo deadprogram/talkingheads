@@ -94,9 +94,6 @@ func (a *Actor) Run(ctx context.Context, systemPrompt string) error {
 		}
 
 		a.appendAssistant(&conversation, content)
-		if content != "" && a.outputFunc != nil {
-			a.outputFunc(content)
-		}
 		needMoreInput = true
 	}
 }
@@ -132,9 +129,16 @@ func (a *Actor) streamModelTurn(ctx context.Context, conversation []model.D) (st
 	}
 
 	var chunks []string
+	var sentenceBuf string
 	var lastResp model.ChatResponse
 	firstChunk := true
 	reasonThinking := false
+
+	emitSentence := func(s string) {
+		if a.outputFunc != nil {
+			a.outputFunc(s)
+		}
+	}
 
 	for resp := range ch {
 		lastResp = resp
@@ -145,7 +149,6 @@ func (a *Actor) streamModelTurn(ctx context.Context, conversation []model.D) (st
 
 		if firstChunk {
 			firstChunk = false
-			//fmt.Println()
 		}
 
 		switch resp.Choices[0].FinishReason() {
@@ -153,6 +156,9 @@ func (a *Actor) streamModelTurn(ctx context.Context, conversation []model.D) (st
 			return "", nil, lastResp.Usage, fmt.Errorf("error from model: %s", resp.Choices[0].Delta.Content)
 
 		case model.FinishReasonStop:
+			if remaining := strings.TrimSpace(sentenceBuf); remaining != "" {
+				emitSentence(remaining)
+			}
 			text := strings.TrimLeft(strings.Join(chunks, ""), "\n")
 			return text, nil, lastResp.Usage, nil
 
@@ -164,24 +170,25 @@ func (a *Actor) streamModelTurn(ctx context.Context, conversation []model.D) (st
 			if delta.Content != "" {
 				if reasonThinking {
 					reasonThinking = false
-					//fmt.Print("\n\n")
 				}
 
-				//fmt.Print(delta.Content)
 				chunks = append(chunks, delta.Content)
+				sentenceBuf += delta.Content
+				sentenceBuf = flushSentences(sentenceBuf, emitSentence)
 			}
 		}
 	}
 
 	// Stream ended without an explicit finish reason.
+	if remaining := strings.TrimSpace(sentenceBuf); remaining != "" {
+		emitSentence(remaining)
+	}
 	text := strings.TrimLeft(strings.Join(chunks, ""), "\n")
 	return text, nil, lastResp.Usage, nil
 }
 
 // appendToolCalls adds the assistant's tool call request to the conversation.
 func (a *Actor) appendToolCalls(conversation *[]model.D, toolCalls []model.ResponseToolCall) {
-	//fmt.Print("\n\n")
-
 	var toolCallDocs []model.D
 	for _, tc := range toolCalls {
 		argsJSON, _ := json.Marshal(tc.Function.Arguments)
@@ -207,7 +214,6 @@ func (a *Actor) appendAssistant(conversation *[]model.D, content string) {
 		return
 	}
 
-	//fmt.Print("\n")
 	*conversation = append(*conversation, model.D{"role": "assistant", "content": content})
 }
 
@@ -229,8 +235,6 @@ func (a *Actor) callTools(ctx context.Context, toolCalls []model.ResponseToolCal
 		content, _ := resp["content"].(string)
 		if strings.Contains(content, `"FAILED"`) {
 			log.Printf("\u001b[91m%s\u001b[0m\n", content)
-		} else {
-			log.Printf("\u001b[90mok\u001b[0m\n")
 		}
 
 		resps = append(resps, resp)
@@ -267,6 +271,32 @@ func InstallSystem(modelURL string) (models.Path, error) {
 	}
 
 	return mp, nil
+}
+
+// flushSentences calls fn for each complete sentence found in buf (delimited
+// by '.', '!' or '?' followed by whitespace or end-of-string) and returns any
+// remaining partial sentence that has not yet ended.
+func flushSentences(buf string, fn func(string)) string {
+	for {
+		idx := -1
+		for i := 0; i < len(buf); i++ {
+			c := buf[i]
+			if c == '.' || c == '!' || c == '?' {
+				if i+1 >= len(buf) || buf[i+1] == ' ' || buf[i+1] == '\n' || buf[i+1] == '\t' {
+					idx = i
+					break
+				}
+			}
+		}
+		if idx < 0 {
+			break
+		}
+		if sentence := strings.TrimSpace(buf[:idx+1]); sentence != "" {
+			fn(sentence)
+		}
+		buf = strings.TrimLeft(buf[idx+1:], " \n\t")
+	}
+	return buf
 }
 
 func newKronk(mp models.Path) (*kronk.Kronk, error) {
