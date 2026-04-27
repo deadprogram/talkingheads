@@ -1,0 +1,53 @@
+# dialogue
+
+Text-to-speech service that listens for MQTT messages and speaks them with the [sayanything](https://github.com/hybridgroup/go-sayanything) package using the [Piper](https://github.com/rhasspy/piper) Text To Speech engine to create audio output for everything said by Actors.
+
+## Commands
+
+### `serve`
+
+Connect to an MQTT broker and speak any messages published to `speak/#`.
+
+```shell
+dialogue serve --server tcp://localhost:1883 \
+               --voice llama3000:en_US:en_US-joe-medium \
+               --voice gemmai:en_US:en_US-amy-low
+```
+
+| Flag | Alias | Default | Description |
+|---|---|---|---|
+| `--server` | `-s` | *(required)* | MQTT broker URL |
+| `--voice` | `-v` | *(required, repeatable)* | Voice in `name:lang:model` format |
+| `--data` | `-d` | `./voices` | Directory containing `.onnx` voice model files |
+| `--gpu` | | `false` | Enable GPU acceleration for TTS |
+
+### `say`
+
+Speak a single line and exit — useful for testing a voice without a broker.
+
+```shell
+dialogue say --name llama3000 --lang en_US --voice en_US-joe-medium --say "Hello world"
+```
+
+| Flag | Alias | Default | Description |
+|---|---|---|---|
+| `--name` | `-n` | *(required)* | Speaker name |
+| `--lang` | `-l` | *(required)* | Language code (e.g. `en_US`) |
+| `--voice` | `-v` | *(required)* | Voice model name |
+| `--data` | `-d` | `./voices` | Directory containing `.onnx` voice model files |
+| `--say` | | *(required)* | Text to speak |
+| `--gpu` | | `false` | Enable GPU acceleration |
+
+## MQTT message format
+
+Messages must be published to `speak/<name>` as JSON:
+
+```json
+{"who": "llama3000", "what": "Hello, I am ready."}
+```
+
+The `who` field is matched against the registered voice names. Messages for unknown speakers are silently dropped.
+
+## Voice models
+
+Voice model files (`.onnx` + `.onnx.json`) should be placed in the `./voices` directory (or the path passed to `--data`).
