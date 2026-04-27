@@ -34,7 +34,7 @@ type Actor struct {
 }
 
 // NewActor creates a new instance of Actor.
-func NewActor(mp models.Path, moreFunc func(conversation *[]model.D), outputFunc func(content string)) (*Actor, error) {
+func NewActor(mp models.Path, commander Commander, moreFunc func(conversation *[]model.D), outputFunc func(content string)) (*Actor, error) {
 	if err := kronk.Init(); err != nil {
 		return nil, fmt.Errorf("unable to init kronk: %w", err)
 	}
@@ -47,7 +47,7 @@ func NewActor(mp models.Path, moreFunc func(conversation *[]model.D), outputFunc
 	// Build tool documents by registering each tool with its own tools map.
 	toolsMap := make(map[string]Tool)
 	toolDocuments := []model.D{
-		RegisterMovement(toolsMap),
+		RegisterMovement(toolsMap, commander),
 	}
 
 	actor := Actor{

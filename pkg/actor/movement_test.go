@@ -10,7 +10,7 @@ import (
 
 func TestRegisterMovement_AddsToMap(t *testing.T) {
 	tools := make(map[string]Tool)
-	RegisterMovement(tools)
+	RegisterMovement(tools, nil)
 
 	if _, ok := tools["tool_movement"]; !ok {
 		t.Fatal("expected tool_movement to be registered in tools map")
@@ -19,7 +19,7 @@ func TestRegisterMovement_AddsToMap(t *testing.T) {
 
 func TestRegisterMovement_DocumentStructure(t *testing.T) {
 	tools := make(map[string]Tool)
-	doc := RegisterMovement(tools)
+	doc := RegisterMovement(tools, nil)
 
 	if doc["type"] != "function" {
 		t.Errorf("type: got %v, want %q", doc["type"], "function")
@@ -54,7 +54,7 @@ func TestRegisterMovement_DocumentStructure(t *testing.T) {
 
 func TestMovementCall_Look(t *testing.T) {
 	tools := make(map[string]Tool)
-	RegisterMovement(tools)
+	RegisterMovement(tools, nil)
 
 	toolCall := model.ResponseToolCall{
 		ID: "tc-1",
@@ -83,7 +83,7 @@ func TestMovementCall_Look(t *testing.T) {
 
 func TestMovementCall_SlowLook(t *testing.T) {
 	tools := make(map[string]Tool)
-	RegisterMovement(tools)
+	RegisterMovement(tools, nil)
 
 	toolCall := model.ResponseToolCall{
 		ID: "tc-2",
@@ -106,7 +106,7 @@ func TestMovementCall_SlowLook(t *testing.T) {
 
 func TestMovementCall_HeadShake(t *testing.T) {
 	tools := make(map[string]Tool)
-	RegisterMovement(tools)
+	RegisterMovement(tools, nil)
 
 	toolCall := model.ResponseToolCall{
 		ID: "tc-3",
@@ -129,7 +129,7 @@ func TestMovementCall_HeadShake(t *testing.T) {
 
 func TestMovementCall_Wait(t *testing.T) {
 	tools := make(map[string]Tool)
-	RegisterMovement(tools)
+	RegisterMovement(tools, nil)
 
 	toolCall := model.ResponseToolCall{
 		ID: "tc-4",
@@ -152,7 +152,7 @@ func TestMovementCall_Wait(t *testing.T) {
 
 func TestMovementCall_Speak(t *testing.T) {
 	tools := make(map[string]Tool)
-	RegisterMovement(tools)
+	RegisterMovement(tools, nil)
 
 	toolCall := model.ResponseToolCall{
 		ID: "tc-5",
@@ -175,7 +175,7 @@ func TestMovementCall_Speak(t *testing.T) {
 
 func TestMovementCall_Stop(t *testing.T) {
 	tools := make(map[string]Tool)
-	RegisterMovement(tools)
+	RegisterMovement(tools, nil)
 
 	toolCall := model.ResponseToolCall{
 		ID: "tc-6",
@@ -198,7 +198,7 @@ func TestMovementCall_Stop(t *testing.T) {
 
 func TestMovementCall_MissingCommand(t *testing.T) {
 	tools := make(map[string]Tool)
-	RegisterMovement(tools)
+	RegisterMovement(tools, nil)
 
 	toolCall := model.ResponseToolCall{
 		ID: "tc-7",
@@ -221,7 +221,7 @@ func TestMovementCall_MissingCommand(t *testing.T) {
 
 func TestMovementCall_LookMissingAngle(t *testing.T) {
 	tools := make(map[string]Tool)
-	RegisterMovement(tools)
+	RegisterMovement(tools, nil)
 
 	toolCall := model.ResponseToolCall{
 		ID: "tc-8",
@@ -244,7 +244,7 @@ func TestMovementCall_LookMissingAngle(t *testing.T) {
 
 func TestMovementCall_LookAngleOutOfRange(t *testing.T) {
 	tools := make(map[string]Tool)
-	RegisterMovement(tools)
+	RegisterMovement(tools, nil)
 
 	toolCall := model.ResponseToolCall{
 		ID: "tc-9",
@@ -267,7 +267,7 @@ func TestMovementCall_LookAngleOutOfRange(t *testing.T) {
 
 func TestMovementCall_UnknownCommand(t *testing.T) {
 	tools := make(map[string]Tool)
-	RegisterMovement(tools)
+	RegisterMovement(tools, nil)
 
 	toolCall := model.ResponseToolCall{
 		ID: "tc-10",

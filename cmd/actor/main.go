@@ -52,6 +52,15 @@ func main() {
 				Value:   "actor",
 				Aliases: []string{"n"},
 			},
+			&cli.StringFlag{
+				Name:  "serial",
+				Usage: "serial port to send action commands to (e.g. /dev/ttyACM0); if omitted, commands are logged to console",
+			},
+			&cli.IntFlag{
+				Name:  "baud",
+				Usage: "baud rate for the serial port",
+				Value: 9600,
+			},
 		},
 		Action: run,
 	}
@@ -67,6 +76,8 @@ func run(c *cli.Context) error {
 	systemPrompt := c.String("system-prompt")
 	server := c.String("server")
 	name := c.String("name")
+	serialPort := c.String("serial")
+	baudRate := c.Int("baud")
 
 	if modelURL == "" && modelPath == "" {
 		return cli.Exit("one of --model-url or --model-path is required", 1)
@@ -127,7 +138,18 @@ func run(c *cli.Context) error {
 		}
 	}
 
-	a, err := actor.NewActor(mp, moreFunc, outputFunc)
+	var commander actor.Commander
+	if serialPort != "" {
+		sc, err := actor.NewSerialCommander(serialPort, baudRate)
+		if err != nil {
+			return cli.Exit(fmt.Sprintf("failed to open serial port: %v", err), 1)
+		}
+		defer sc.Close()
+		commander = sc
+		log.Printf("Serial mode: sending action commands to %s at %d baud\n", serialPort, baudRate)
+	}
+
+	a, err := actor.NewActor(mp, commander, moreFunc, outputFunc)
 	if err != nil {
 		return cli.Exit(fmt.Sprintf("failed to create actor: %v", err), 1)
 	}

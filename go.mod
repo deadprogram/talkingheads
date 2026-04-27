@@ -8,6 +8,7 @@ require (
 	github.com/ggerganov/whisper.cpp/bindings/go v0.0.0-20260420051257-fc674574ca27
 	github.com/gordonklaus/portaudio v0.0.0-20260203164431-765aa7dfa631
 	github.com/hybridgroup/go-sayanything v0.0.0-20240612142303-20a80305bf1e
+	go.bug.st/serial v1.6.4
 	golang.org/x/term v0.42.0
 )
 
@@ -49,6 +50,7 @@ require (
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/cncf/xds/go v0.0.0-20260202195803-dba9d589def2 // indirect
+	github.com/creack/goselect v0.1.2 // indirect
 	github.com/ebitengine/purego v0.10.0 // indirect
 	github.com/envoyproxy/go-control-plane/envoy v1.37.0 // indirect
 	github.com/envoyproxy/protoc-gen-validate v1.3.3 // indirect
