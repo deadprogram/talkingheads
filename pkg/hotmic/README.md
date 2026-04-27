@@ -68,6 +68,7 @@ Because the whisper.cpp bindings use CGo, you must tell the compiler where to fi
 export WHISPER_DIR=$(git rev-parse --show-toplevel)/lib/whisper.cpp
 export C_INCLUDE_PATH=$WHISPER_DIR/include:$WHISPER_DIR/ggml/include
 export LIBRARY_PATH=$WHISPER_DIR
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$WHISPER_DIR
 ```
 
 Then build normally:

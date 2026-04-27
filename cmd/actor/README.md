@@ -45,6 +45,8 @@ actor --model-path ./models/llama.gguf \
       --name bob \
       --system-prompt "You are a pirate named Bob."
 
+./build/actor --model-path gemma-3-1b-it-heretic-extreme-uncensored-abliterated.i1-Q4_K_M.gguf --server tcp://localhost:1883 --name gemmai --system-prompt "You are a pirate named Gemmai."
+
 # With serial head control
 actor --model-path ./models/llama.gguf --serial /dev/ttyACM0 --baud 9600
 ```

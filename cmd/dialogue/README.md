@@ -10,8 +10,8 @@ Connect to an MQTT broker and speak any messages published to `speak/#`.
 
 ```shell
 dialogue serve --server tcp://localhost:1883 \
-               --voice llama3000:en_US:en_US-joe-medium \
-               --voice gemmai:en_US:en_US-amy-low
+               --voice llama3000:en_US:joe-medium \
+               --voice gemmai:en_US:amy-low
 ```
 
 | Flag | Alias | Default | Description |
@@ -26,7 +26,7 @@ dialogue serve --server tcp://localhost:1883 \
 Speak a single line and exit — useful for testing a voice without a broker.
 
 ```shell
-dialogue say --name llama3000 --lang en_US --voice en_US-joe-medium --say "Hello world"
+dialogue say --name llama3000 --lang en_US --voice joe-medium --say "Hello world"
 ```
 
 | Flag | Alias | Default | Description |
