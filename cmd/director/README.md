@@ -1,4 +1,4 @@
-# moderator
+# director
 
 Sends questions to panelists over MQTT. Questions can be typed at the keyboard or spoken via a push-to-talk microphone (hotmic mode).
 
@@ -37,10 +37,10 @@ export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$WHISPER_DIR
 export CGO_LDFLAGS="-L$WHISPER_DIR -lwhisper -lggml -lm -lstdc++"
 ```
 
-Then from the `cmd/moderator` directory:
+Then from the `cmd/director` directory:
 
 ```sh
-go build -o ../../build/moderator .
+go build -o ../../build/director .
 ```
 
 See [pkg/hotmic/README.md](../../pkg/hotmic/README.md) for full instructions on building whisper.cpp from source and downloading a model.
@@ -50,13 +50,13 @@ See [pkg/hotmic/README.md](../../pkg/hotmic/README.md) for full instructions on 
 Keyboard mode:
 
 ```sh
-./moderator --server tcp://localhost:1883
+./director --server tcp://localhost:1883
 ```
 
 Hotmic mode with the base English model, toggled with the space bar:
 
 ```sh
-./moderator \
+./director \
   --server tcp://localhost:1883 \
   --hotmic-model lib/whisper.cpp/models/ggml-base.en.bin \
   --hotmic-lang en \

@@ -1,15 +1,8 @@
 # Talking Heads From The Year 2053
 
-![](./images/gophercon-2024-talking-heads.jpg)
+![Talking Heads From The Year 2053 at Gophercon 2024](./images/gophercon-2024-talking-heads.jpg)
 
-A Fantastical Panel Discussion Between Machines From The Future
-
-## Starting everything
-
-```shell
-./start.sh
-tmuxinator s talkingheads -p ./talkingheads-serial.yml
-```
+A Fantastical Interaction Between Machines From The Future and Their Pet Human
 
 ## Architecture
 
@@ -18,162 +11,169 @@ tmuxinator s talkingheads -p ./talkingheads-serial.yml
 ```mermaid
 flowchart LR
 subgraph mqtt broker
-    discuss
-    responses
+    ask
+    speak
 end
-subgraph panelists
-    panelist-1
-    panelist-2
-    panelist-3
+subgraph actors
+    actor-1
+    actor-2
+    actor-3
 end
-subgraph moderator
-    controller
+subgraph director
+    hotmic
 end
-moderator -- publish --> discuss
-discuss-- subscribe -->panelists
-panelists-- publish -->responses
-responses-- subscribe -->panelists
+subgraph dialogue
+    sayanything
+end
+director -- publish --> ask
+ask-- subscribe -->actors
+actors-- publish -->speak
+speak-- subscribe -->actors
+speak-- subscribe -->dialogue
 ```
 
-### Panelist
+### Actor
+
+Actor runs on the Linux part of an Arduino UNO Q board. It is written in Go with [Kronk](https://github.com/ardanlabs/kronk) and [yzma](https://github.com/hybridgroup/yzma) to perform local inference using [llama.cpp](https://github.com/ggml-org/llama.cpp). It communicates with other Actors by publishing and subscribing to [MQTT](https://mqtt.org/) messages.
 
 ```mermaid
 flowchart LR
-subgraph panelist
-    subgraph llm
-        listening-->history
-        history-->process
-        process-->langchaingo
-        langchaingo-->respond
+subgraph mqtt broker
+    ask
+    speak
+end
+subgraph actor
+    subgraph kronk
+        process<-->yzma
     end
-    subgraph say
-        respond-->speak
-        speak-->piper
+    subgraph tools
+        process<-->actions
+        actions
+    end
+    subgraph yzma
+        llama.cpp
+        llama.cpp-->model
+    end
+    ask-- subscribe -->process
+    process-- publish -->speak
+    speak-- subscribe -->process
+end
+subgraph The Head
+    actions<-- UART -->lights
+    actions<-- UART -->action
+end
+```
+
+### The Head
+
+The Head is controlled by the STM32 microcontroller of an Arduino UNO Q board using the `action` firmware written using TinyGo. Actor communicates with The Head using the onboard serial port between the microcontroller and the main processor running on the same Arduino UNO Q board.
+
+```mermaid
+flowchart LR
+subgraph Arduino UNO Q
+    subgraph Microcontroller
+        Serial
+        GPIO
+        UART
+    end
+    GPIO --> LEDMatrix[LED Matrix]
+    subgraph Linux
+        Actor<-->Serial
+    end
+end
+subgraph Additional hardware
+    GPIO --> WS2812Head[WS2812 Head LEDs]
+    UART --> Servo[Feetech Servo]
+end
+```
+
+### Director
+
+Director runs on a separate computer that is connected to the same local network as the MQTT broker. It uses the Go bindings for [whisper.cpp](https://github.com/ggml-org/whisper.cpp) to perform "push to talk" to communicate with Actors.
+
+```mermaid
+flowchart LR
+subgraph mqtt broker
+    ask
+end
+subgraph director
+    hotmic
+end
+subgraph hotmic
+    whisper.cpp
+end
+director -- publish --> ask
+```
+
+### Dialogue
+
+Dialogue runs on a separate computer that is connected to the same local network as the MQTT broker. It uses the [sayanything](https://github.com/hybridgroup/go-sayanything) package with the [Piper](https://github.com/rhasspy/piper) Text To Speech engine to create audio output for everything said by Actors.
+
+```mermaid
+flowchart LR
+subgraph mqtt broker
+    speak
+end
+subgraph dialogue
+    speak-- subscribe -->sayanything
+    subgraph sayanything
         piper-->tts[Text to speech]
     end
-    subgraph ollamaserver
-        langchaingo<-->ollama
+    subgraph portaudio
+        tts-- WAV -->speaker
     end
-    subgraph nvidia
-        ollama<-- CUDA -->GPU
-        piper<-- CUDA -->GPU
-    end
-end
-subgraph dollhead
-    speak<-- USB -->commands
-    listening<-- USB -->commands
-end
-subgraph mqtt broker
-    discuss-- subscribe -->process
-    respond-- publish -->responses
-    responses-- subscribe -->listening
-end
-subgraph portaudio
-    tts-- WAV -->speaker
 end
 ```
 
-### Dollhead
-
-```mermaid
-flowchart LR
-subgraph Microcontroller
-    USB
-    GPIO
-    PWM
-end
-GPIO --> WS2812Head[WS2812 Head LEDs]
-GPIO --> WS2812Collar[WS2812 Collar LEDs]
-PWM --> Servo
-Computer <--> USB
-```
-
-### Moderator
-
+### Detail
 
 ```mermaid
 flowchart LR
 subgraph mqtt broker
-    discuss
+    ask
+    speak
 end
-subgraph moderator
-    controller
+subgraph actor
+    subgraph kronk
+        process<-->yzma
+    end
+    subgraph tools
+        process<-->actions
+        actions
+    end
+    subgraph yzma
+        llama.cpp
+        llama.cpp-->model
+    end
+    ask-- subscribe -->process
+    process-- publish -->speak
+    speak-- subscribe -->process
 end
-subgraph Adafruit Macropad
-    customkeys[tinygo-keyboard] -- USB-HID --> controller
+subgraph The Head
+    actions<-- UART -->lights
+    actions<-- UART -->action
 end
-moderator -- publish --> discuss
+subgraph dialogue
+    speak-- subscribe -->sayanything
+    subgraph sayanything
+        piper-->tts[Text to speech]
+    end
+    subgraph portaudio
+        tts-- WAV -->speaker
+    end
+end
+subgraph director
+    hotmic
+end
+subgraph hotmic
+    whisper.cpp
+end
+director -- publish --> ask
 ```
 
-## Model server
+## Models
 
-Start ollama
-
-```shell
-docker run --gpus=all -d -v ${HOME}/.ollama:/root/.ollama -v ${HOME}/ollama-import:/root/ollama-import -p 11434:11434 --name ollama ollama/ollama:latest
-```
-
-Stop ollama
-
-```shell
-docker stop ollama
-```
-
-Subsequent starts
-
-```shell
-docker start ollama
-```
-
-### Models
-
-Download models
-
-```shell
-docker exec ollama ollama run llama3
-docker exec ollama ollama run superdrew100/phi3-medium-abliterated
-docker exec ollama ollama run gemma2
-```
-
-### Importing models
-
-```shell
-docker exec ollama ollama create "Phi-3-mini-128k-instruct-abliterated-v3_q8" -f phi3-mini-modelfile
-```
-
-Uncensored models
-
-https://huggingface.co/Orenguteng/Llama-3-8B-Lexi-Uncensored-GGUF
-
-```
-FROM /root/ollama-import/Lexi-Llama-3-8B-Uncensored_Q4_K_M.gguf
-TEMPLATE "
-{{ if .System }}<|start_header_id|>system<|end_header_id|>
-{{ .System }}<|eot_id|>{{ end }}{{ if .Prompt }}<|start_header_id|>user<|end_header_id|>
-{{ .Prompt }}<|eot_id|>{{ end }}<|start_header_id|>assistant<|end_header_id|>
-{{ .Response }}<|eot_id|>
-"
-PARAMETER num_keep 24
-PARAMETER stop <|start_header_id|>
-PARAMETER stop <|end_header_id|>
-PARAMETER stop <|eot_id|>
-```
-
-https://huggingface.co/failspy/Phi-3-mini-128k-instruct-abliterated-v3-GGUF/blob/main/Phi-3-mini-128k-instruct-abliterated-v3_q8.gguf
-
-```
-FROM /root/ollama-import/Phi-3-mini-128k-instruct-abliterated-v3_q8.gguf
-
-TEMPLATE """<|im_start|>system
-{{ .System }}<|im_end|>
-<|im_start|>user
-{{ .Prompt }}<|im_end|>
-<|im_start|>assistant
-"""
-
-PARAMETER stop "<|im_start|>"
-PARAMETER stop "<|im_end|>"
-```
+More info soon...
 
 ## MQTT broker
 
@@ -181,34 +181,10 @@ PARAMETER stop "<|im_end|>"
 docker run -d --network host eclipse-mosquitto
 ```
 
-## TTS Engine
+## Piper TTS Engine
 
 https://github.com/rhasspy/piper
 
 - download binary
 - add to path
 - download voices to `./voices`
-
-## Panelist
-
-```shell
-cd cmd
-go run ./panelist/ -l="en-US" -voice="hfc_female-medium" -data="../voices" -tts-engine="piper" -model="llama3" -name="llama" -server="localhost:1883"
-```
-
-```shell
-cd cmd
-go run ./panelist/ -l="en-US" -voice="hfc_female-medium" -data="../voices" -tts-engine="piper" -speak="Hello, there!"
-```
-
-## Moderator
-
-```shell
-go run ./moderator/ -server="localhost:1883"
-```
-
-## License
-
-Copyright 2023-2024 The Hybrid Group.
-
-Other included content copyright of their respective holders.
