@@ -1,4 +1,4 @@
-//go:build !feetech
+//go:build !feetech && tinygo
 
 package main
 
@@ -8,16 +8,14 @@ import (
 	"tinygo.org/x/drivers/servo"
 )
 
-var (
-	servoPWM = &machine.TIM3
-	servoPin = machine.D3
-)
-
 type ServoStandard struct {
 	servo.Servo
 }
 
 func NewServo() (*ServoStandard, error) {
+	servoPWM := &machine.TIM3
+	servoPin := machine.D3
+
 	svo, err := servo.New(servoPWM, servoPin)
 	if err != nil {
 		return nil, err
@@ -30,4 +28,5 @@ func NewServo() (*ServoStandard, error) {
 
 func (s *ServoStandard) SetAngle(angle int) {
 	s.Servo.SetAngle(angle)
+	machine.A1.Low()
 }

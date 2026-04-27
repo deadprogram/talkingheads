@@ -1,119 +1,43 @@
 package main
 
 import (
-	"machine"
 	"math/rand"
-
-	"time"
+	"strconv"
+	"strings"
 )
 
 var (
-	uart  = machine.Serial
-	tx    = machine.UART_TX_PIN
-	rx    = machine.UART_RX_PIN
 	input = make([]byte, 0, 64)
-	mode  = "off"
+	mode  = "stop"
 
-	head     = NewHeadLED()
-	svo      ServoDevice
-	position string
-	angle    int
-
-	neoPin = machine.D4
+	head        *HeadLED
+	svo         ServoDevice
+	angle       = 90
+	targetAngle = 90
 )
 
-func main() {
-	uart.Configure(machine.UARTConfig{TX: tx, RX: rx})
+// handleCommand parses and dispatches a received serial command.
+func handleCommand(cmd string) error {
+	parts := strings.SplitN(strings.TrimSpace(cmd), " ", 2)
+	command := parts[0]
 
-	go lights()
-	go motion()
-
-	for {
-		if uart.Buffered() > 0 {
-			data, _ := uart.ReadByte()
-
-			switch data {
-			case 13:
-				// return key
-				cmd := string(input)
-				input = input[:0]
-				mode = cmd
-
-			default:
-				// just capture the character
-				input = append(input, data)
-			}
+	switch command {
+	case "look", "slowlook":
+		if len(parts) != 2 {
+			return errAngleRequired
 		}
-		time.Sleep(10 * time.Millisecond)
-	}
-}
-
-func lights() {
-	for {
-		switch mode {
-		case "green":
-			head.Green()
-		case "red":
-			head.Red()
-		case "talk":
-			head.Alternate(green, blue)
-		case "talk1":
-			head.Alternate(green, black)
-		case "talk2":
-			head.Alternate(blue, red)
-		case "talk3":
-			head.Alternate(red, black)
-		case "stop":
-			head.Off()
-		default:
-			head.Off()
+		a, err := strconv.Atoi(strings.TrimSpace(parts[1]))
+		if err != nil {
+			return errInvalidAngle
 		}
-
-		time.Sleep(100 * time.Millisecond)
+		targetAngle = a
+		mode = command
+	case "wait", "speak", "headshake", "stop":
+		mode = command
+	default:
+		return errUnknownCommand
 	}
-}
-
-func motion() {
-	svo, _ = NewServo()
-
-	for {
-		switch mode {
-		case "off":
-			break
-		case "left":
-			if position != "left" {
-				svo.SetAngle(randomInt(110, 140))
-				position = "left"
-				machine.A1.Low()
-			}
-		case "right":
-			if position != "right" {
-				svo.SetAngle(randomInt(40, 70))
-				position = "right"
-				machine.A1.Low()
-			}
-		case "talk", "talk1", "talk2", "talk3":
-			angle = movement(angle, randomInt(50, 130))
-			svo.SetAngle(angle)
-			position = "random"
-			machine.A1.Low()
-		case "stop":
-			if position != "center" {
-				svo.SetAngle(90)
-				position = "center"
-				machine.A1.Low()
-				machine.A1.Low()
-			}
-		default:
-			if position != "center" {
-				svo.SetAngle(90)
-				position = "center"
-				machine.A1.Low()
-			}
-		}
-
-		time.Sleep(200 * time.Millisecond)
-	}
+	return nil
 }
 
 // Returns an int >= min, < max
@@ -123,7 +47,7 @@ func randomInt(min, max int) int {
 
 const maxMovement = 15
 
-// keep movement to maxMovement degrees at time
+// keep movement to maxMovement degrees at a time
 func movement(current, target int) int {
 	if current < target {
 		if target-current > maxMovement {
@@ -137,11 +61,4 @@ func movement(current, target int) int {
 		return target
 	}
 	return current
-}
-
-func failure(msg string) {
-	for {
-		println(msg)
-		time.Sleep(1 * time.Second)
-	}
 }

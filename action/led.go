@@ -1,3 +1,5 @@
+//go:build tinygo
+
 package main
 
 import (
@@ -28,7 +30,7 @@ type HeadLED struct {
 
 // NewHeadLED returns a new HeadLED.
 func NewHeadLED() *HeadLED {
-	neo := neoPin
+	neo := machine.D4
 	neo.Configure(machine.PinConfig{Mode: machine.PinOutput})
 	v := ws2812.New(neo)
 

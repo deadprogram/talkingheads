@@ -1,4 +1,4 @@
-//go:build feetech
+//go:build feetech && tinygo
 
 package main
 
