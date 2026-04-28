@@ -18,9 +18,9 @@ import (
 )
 
 const (
-	defaultTemperature = float32(0.1)
-	defaultTopP        = float32(0.1)
-	defaultTopK        = int32(1)
+	defaultTemperature = float32(0.6)
+	defaultTopP        = float32(0.95)
+	defaultTopK        = int32(20)
 	maxPredictTokens   = 2048
 )
 
@@ -61,7 +61,9 @@ func NewActor(modelPath string, commander Commander, moreFunc func(conversation 
 		return nil, fmt.Errorf("unable to load model: %w", err)
 	}
 
-	lctx, err := llama.InitFromModel(mdl, llama.ContextDefaultParams())
+	ctxParams := llama.ContextDefaultParams()
+	ctxParams.NCtx = 4096
+	lctx, err := llama.InitFromModel(mdl, ctxParams)
 	if err != nil {
 		llama.ModelFree(mdl)
 		return nil, fmt.Errorf("unable to create context: %w", err)
@@ -121,7 +123,7 @@ func (a *Actor) Run(ctx context.Context, systemPrompt string) error {
 			}
 		}
 
-		content, toolCalls, err := a.generateTurn(ctx, conversation)
+		content, toolCalls, err := a.generateTurn(ctx, &conversation)
 		if err != nil {
 			return err
 		}
@@ -150,8 +152,10 @@ func (a *Actor) GetMore(conversation *[]message.Message) bool {
 
 // generateTurn applies the chat template, runs inference, and returns the text
 // content and any tool calls parsed from the response.
-func (a *Actor) generateTurn(ctx context.Context, conversation []message.Message) (string, []message.ToolCall, error) {
-	prompt, err := template.Apply(a.chatTemplate, conversation, true)
+// The conversation pointer may be updated to trim old messages if the prompt
+// exceeds the model's context window.
+func (a *Actor) generateTurn(ctx context.Context, conversation *[]message.Message) (string, []message.ToolCall, error) {
+	prompt, err := template.Apply(a.chatTemplate, *conversation, true)
 	if err != nil {
 		return "", nil, fmt.Errorf("error applying chat template: %w", err)
 	}
@@ -167,12 +171,40 @@ func (a *Actor) generateTurn(ctx context.Context, conversation []message.Message
 	llama.SamplerReset(a.sampler)
 
 	tokens := llama.Tokenize(a.vocab, prompt, true, false)
-	if _, err := llama.Decode(a.llamaCtx, llama.BatchGetOne(tokens)); err != nil {
-		return "", nil, fmt.Errorf("error decoding prompt: %w", err)
+
+	// Trim oldest non-system messages if the prompt exceeds the context window.
+	if nCtx := int(llama.NCtx(a.llamaCtx)); nCtx > 0 {
+		maxPromptTokens := nCtx - maxPredictTokens
+		for len(tokens) > maxPromptTokens && len(*conversation) > 2 {
+			// Drop the second message (oldest non-system entry) and re-tokenize.
+			log.Println("trimming oldest message from conversation to fit context window")
+			*conversation = append((*conversation)[:1], (*conversation)[2:]...)
+			prompt, err = template.Apply(a.chatTemplate, *conversation, true)
+			if err != nil {
+				return "", nil, fmt.Errorf("error applying chat template after trim: %w", err)
+			}
+			tokens = llama.Tokenize(a.vocab, prompt, true, false)
+		}
+	}
+
+	nBatch := int(llama.NBatch(a.llamaCtx))
+	if nBatch <= 0 {
+		nBatch = 512
+	}
+	for i := 0; i < len(tokens); i += nBatch {
+		end := i + nBatch
+		if end > len(tokens) {
+			end = len(tokens)
+		}
+		if _, err := llama.Decode(a.llamaCtx, llama.BatchGetOne(tokens[i:end])); err != nil {
+			return "", nil, fmt.Errorf("error decoding prompt: %w", err)
+		}
 	}
 
 	var chunks []string
 	var sentenceBuf string
+	var inThinking bool
+	var thinkHold string
 	pieceBuf := make([]byte, 128)
 
 	emitSentence := func(s string) {
@@ -197,13 +229,21 @@ func (a *Actor) generateTurn(ctx context.Context, conversation []message.Message
 		if n > 0 {
 			piece := string(pieceBuf[:n])
 			chunks = append(chunks, piece)
-			sentenceBuf += piece
-			sentenceBuf = flushSentences(sentenceBuf, emitSentence)
+			visible := filterThinkingPiece(piece, &inThinking, &thinkHold)
+			if visible != "" {
+				sentenceBuf += visible
+				sentenceBuf = flushSentences(sentenceBuf, emitSentence)
+			}
 		}
 
 		if _, err := llama.Decode(a.llamaCtx, llama.BatchGetOne([]llama.Token{token})); err != nil {
 			break
 		}
+	}
+
+	// Flush any partial tag hold buffer that turned out not to be a tag.
+	if !inThinking && thinkHold != "" {
+		sentenceBuf += thinkHold
 	}
 
 	text := strings.TrimSpace(strings.TrimLeft(strings.Join(chunks, ""), "\n"))
@@ -337,6 +377,53 @@ func modelFilename(rawURL string) string {
 		base = base[:i]
 	}
 	return base
+}
+
+// filterThinkingPiece processes a newly arrived piece of text, filtering out
+// content inside <think>...</think> blocks. inThinking and holdBuf are
+// persistent state across calls. Returns the visible (non-thinking) content.
+func filterThinkingPiece(piece string, inThinking *bool, holdBuf *string) string {
+	combined := *holdBuf + piece
+	*holdBuf = ""
+	result := ""
+
+	for combined != "" {
+		if *inThinking {
+			idx := strings.Index(combined, "</think>")
+			if idx >= 0 {
+				*inThinking = false
+				combined = combined[idx+len("</think>"):]
+			} else {
+				// No closing tag yet; hold any partial suffix that could start one.
+				*holdBuf = longestTagPrefix(combined, "</think>")
+				combined = ""
+			}
+		} else {
+			idx := strings.Index(combined, "<think>")
+			if idx >= 0 {
+				result += combined[:idx]
+				*inThinking = true
+				combined = combined[idx+len("<think>"):]
+			} else {
+				// No opening tag; hold any partial suffix that could start one.
+				partial := longestTagPrefix(combined, "<think>")
+				result += combined[:len(combined)-len(partial)]
+				*holdBuf = partial
+				combined = ""
+			}
+		}
+	}
+	return result
+}
+
+// longestTagPrefix returns the longest suffix of s that is a proper prefix of tag.
+func longestTagPrefix(s, tag string) string {
+	for i := len(tag) - 1; i > 0; i-- {
+		if strings.HasSuffix(s, tag[:i]) {
+			return tag[:i]
+		}
+	}
+	return ""
 }
 
 // flushSentences calls fn for each complete sentence found in buf (delimited

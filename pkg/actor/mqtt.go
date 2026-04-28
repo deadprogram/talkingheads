@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log"
 	"regexp"
+	"sync"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/hybridgroup/yzma/pkg/message"
@@ -15,10 +16,11 @@ import (
 // The published response payload is {"who":"<name>","what":"<content>"},
 // which is compatible with the speak/# subscription in pkg/dialogue.
 type MQTTListener struct {
-	name     string
-	client   mqtt.Client
-	incoming chan string
-	done     chan struct{}
+	name      string
+	client    mqtt.Client
+	incoming  chan string
+	done      chan struct{}
+	closeOnce sync.Once
 }
 
 // NewMQTTListener connects to the broker, subscribes to "ask/<name>" for
@@ -152,9 +154,12 @@ func (l *MQTTListener) OutputFunc() func(string) {
 }
 
 // Close unblocks any pending MoreFunc call and disconnects from the broker.
+// Safe to call multiple times.
 func (l *MQTTListener) Close() {
-	close(l.done)
-	l.client.Disconnect(250)
+	l.closeOnce.Do(func() {
+		close(l.done)
+		l.client.Disconnect(250)
+	})
 }
 
 func removeEmoji(str string) string {

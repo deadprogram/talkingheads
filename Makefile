@@ -33,13 +33,13 @@ mqtt:
 	docker run -d --network host eclipse-mosquitto
 
 run-dialogue:
-	./build/dialogue server --server localhost:1883 --voice gemmai:en_US:amy-low
+	./build/dialogue serve --server localhost:1883 --voice gemmai:en_US:amy-low
 
 run-director:
 	./build/director --server localhost:1883
 
 run-gemmai:
-	./build/actor --model-path /home/ron/.kronk/models/mathu59/gemma-4-E2B-it-uncensored-GGUF/gemma-4-E2B-it-uncensored-Q4_K_M.gguf \
+	./build/actor --model-path ~/models/Qwen3.5-4B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf \
       --server tcp://localhost:1883 \
       --name gemmai \
       --script ./scripts/gemmai.md \
