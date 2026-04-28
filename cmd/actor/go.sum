@@ -30,8 +30,8 @@ github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapp
 github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping v0.56.0/go.mod h1:6ZZMQhZKDvUvkJw2rc+oDP90tMMzuU/J+5HG1ZmPOmE=
 github.com/ardanlabs/jinja v1.1.0 h1:SZtVrV+1szfSBXBKQA5FoJtOabUxkJu5IvEX+ADUtcM=
 github.com/ardanlabs/jinja v1.1.0/go.mod h1:onVec/ZOYPqNm7TRiNfJBnW+t9VxSi2gkARWhgP9qwQ=
-github.com/ardanlabs/kronk v1.23.7 h1:zXk61u/V/B/wBckgHpltimq89rYHdnmP0SnMrtLZnKU=
-github.com/ardanlabs/kronk v1.23.7/go.mod h1:TCJrzqDAmdn9NdID/C//3baeDfJB3MAZPbAbGKDIOxc=
+github.com/ardanlabs/kronk v1.23.9 h1:C9UqNUZFIt1x1VoZMFONrhlifyXAx4zB07EG/jE3uQc=
+github.com/ardanlabs/kronk v1.23.9/go.mod h1:TCJrzqDAmdn9NdID/C//3baeDfJB3MAZPbAbGKDIOxc=
 github.com/aws/aws-sdk-go-v2 v1.41.6 h1:1AX0AthnBQzMx1vbmir3Y4WsnJgiydmnJjiLu+LvXOg=
 github.com/aws/aws-sdk-go-v2 v1.41.6/go.mod h1:dy0UzBIfwSeot4grGvY1AqFWN5zgziMmWGzysDnHFcQ=
 github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.9 h1:adBsCIIpLbLmYnkQU+nAChU5yhVTvu5PerROm+/Kq2A=

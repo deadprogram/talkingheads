@@ -3,7 +3,7 @@ module github.com/deadprogram/talkingheads
 go 1.26.0
 
 require (
-	github.com/ardanlabs/kronk v1.23.7
+	github.com/ardanlabs/kronk v1.23.9
 	github.com/eclipse/paho.mqtt.golang v1.4.3
 	github.com/ggerganov/whisper.cpp/bindings/go v0.0.0-20260420051257-fc674574ca27
 	github.com/gordonklaus/portaudio v0.0.0-20260203164431-765aa7dfa631

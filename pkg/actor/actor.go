@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	defaultTemperature = 0.0
+	defaultTemperature = 0.1
 	defaultTopP        = 0.1
 	defaultTopK        = 1
 )
@@ -112,12 +112,12 @@ func (a *Actor) GetMore(conversation *[]model.D) bool {
 // response. It returns the assembled text content, any tool calls, and usage.
 func (a *Actor) streamModelTurn(ctx context.Context, conversation []model.D) (string, []model.ResponseToolCall, *model.Usage, error) {
 	d := model.D{
-		"messages":       conversation,
-		"temperature":    defaultTemperature,
-		"top_p":          defaultTopP,
-		"top_k":          defaultTopK,
-		"tools":          a.toolDocuments,
-		"tool_selection": "auto",
+		"messages":    conversation,
+		"temperature": defaultTemperature,
+		"top_p":       defaultTopP,
+		"top_k":       defaultTopK,
+		"tools":       a.toolDocuments,
+		"tool_choice": "auto",
 	}
 
 	callCtx, cancelCall := context.WithTimeout(ctx, 5*time.Minute)
@@ -304,6 +304,7 @@ func newKronk(mp models.Path) (*kronk.Kronk, error) {
 
 	krn, err := kronk.New(
 		model.WithModelFiles(mp.ModelFiles),
+		model.WithNGpuLayers(0),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create inference model: %w", err)

@@ -16,11 +16,27 @@ One of `--model-url` or `--model-path` is required.
 |---|---|---|---|
 | `--model-url` | `-u` | | HuggingFace or other URL to download the model from |
 | `--model-path` | `-p` | | Path to a pre-downloaded model file |
-| `--system-prompt` | `-s` | `"You are a helpful assistant."` | System prompt that sets the actor's persona |
+| `--script` | `-s` | | Path to a system prompt file (repeatable; files are concatenated in order) |
 | `--server` | `-b` | | MQTT broker URL (e.g. `tcp://localhost:1883`); enables MQTT mode |
 | `--name` | `-n` | `actor` | Actor name used for MQTT topics `ask/<name>` and `speak/<name>` |
 | `--serial` | | | Serial port for sending action commands to the microcontroller (e.g. `/dev/ttyACM0`) |
 | `--baud` | | `9600` | Baud rate for the serial port |
+
+## System prompts
+
+The `--script` flag accepts a path to a Markdown file and can be repeated to
+compose a prompt from multiple files. Files are concatenated in order, separated
+by a blank line. If no `--script` flag is given, the actor defaults to
+`"You are a helpful assistant."`.
+
+Pre-built scripts live in the `scripts/` directory at the repo root:
+
+| Script | Description |
+|---|---|
+| `scripts/llama3000.md` | Llama3000 persona for panel discussion roleplay |
+| `scripts/gemmai.md` | Gemmai persona |
+| `scripts/phineas.md` | Phineas persona |
+| `scripts/movement.md` | Head movement tool instructions (append to any persona) |
 
 ## Modes
 
@@ -39,14 +55,25 @@ running the action firmware. If omitted, commands are logged to the console inst
 # Interactive, local model
 actor --model-path ./models/llama.gguf
 
-# MQTT mode with a custom persona
+# Single persona script
+actor --model-path ./models/llama.gguf \
+      --script scripts/llama3000.md
+
+# Persona + movement tool instructions
+actor --model-path ./models/llama.gguf \
+      --script scripts/llama3000.md \
+      --script scripts/movement.md
+
+# MQTT mode
 actor --model-path ./models/llama.gguf \
       --server tcp://localhost:1883 \
-      --name bob \
-      --system-prompt "You are a pirate named Bob."
-
-./build/actor --model-path gemma-3-1b-it-heretic-extreme-uncensored-abliterated.i1-Q4_K_M.gguf --server tcp://localhost:1883 --name gemmai --system-prompt "You are a pirate named Gemmai."
+      --name gemmai \
+      --script scripts/gemmai.md \
+      --script scripts/movement.md
 
 # With serial head control
-actor --model-path ./models/llama.gguf --serial /dev/ttyACM0 --baud 9600
+actor --model-path ./models/llama.gguf \
+      --script scripts/llama3000.md \
+      --script scripts/movement.md \
+      --serial /dev/ttyACM0 --baud 9600
 ```

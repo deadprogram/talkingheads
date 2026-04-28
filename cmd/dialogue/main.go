@@ -23,7 +23,7 @@ func main() {
 		},
 		Commands: []*cli.Command{
 			{
-				Name:  "serve",
+				Name:  "server",
 				Usage: "connect to an MQTT server and process speak messages",
 				Flags: []cli.Flag{
 					&cli.StringFlag{

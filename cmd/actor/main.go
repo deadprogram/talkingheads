@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/ardanlabs/kronk/sdk/kronk/model"
@@ -14,8 +15,6 @@ import (
 	"github.com/deadprogram/talkingheads/pkg/actor"
 	"github.com/urfave/cli/v2"
 )
-
-const defaultSystemPrompt = "You are a helpful assistant."
 
 func main() {
 	app := &cli.App{
@@ -35,10 +34,9 @@ func main() {
 				Usage:   "local path to a pre-downloaded model file",
 				Aliases: []string{"p"},
 			},
-			&cli.StringFlag{
-				Name:    "system-prompt",
-				Usage:   "system prompt to set the actor's persona",
-				Value:   defaultSystemPrompt,
+			&cli.StringSliceFlag{
+				Name:    "script",
+				Usage:   "path to a system prompt file (repeatable; files are concatenated in order)",
 				Aliases: []string{"s"},
 			},
 			&cli.StringFlag{
@@ -73,7 +71,7 @@ func main() {
 func run(c *cli.Context) error {
 	modelURL := c.String("model-url")
 	modelPath := c.String("model-path")
-	systemPrompt := c.String("system-prompt")
+	scriptFiles := c.StringSlice("script")
 	server := c.String("server")
 	name := c.String("name")
 	serialPort := c.String("serial")
@@ -138,6 +136,11 @@ func run(c *cli.Context) error {
 		}
 	}
 
+	systemPrompt, err := buildSystemPrompt(scriptFiles)
+	if err != nil {
+		return cli.Exit(fmt.Sprintf("failed to load script: %v", err), 1)
+	}
+
 	var commander actor.Commander
 	if serialPort != "" {
 		sc, err := actor.NewSerialCommander(serialPort, baudRate)
@@ -161,4 +164,29 @@ func run(c *cli.Context) error {
 	}
 
 	return nil
+}
+
+// buildSystemPrompt reads each file in paths and concatenates their contents,
+// separated by a blank line. If no files are provided, a sensible default is
+// returned so the actor is always usable without a script.
+func buildSystemPrompt(paths []string) (string, error) {
+	if len(paths) == 0 {
+		return "You are a helpful assistant.", nil
+	}
+
+	var sb strings.Builder
+	for i, path := range paths {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return "", fmt.Errorf("reading script %q: %w", path, err)
+		}
+		if i > 0 {
+			sb.WriteString("\n\n")
+		}
+		sb.Write(data)
+	}
+
+	fmt.Println(strings.TrimSpace(sb.String()))
+
+	return strings.TrimSpace(sb.String()), nil
 }

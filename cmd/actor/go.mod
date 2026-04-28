@@ -5,7 +5,7 @@ go 1.26.0
 replace github.com/deadprogram/talkingheads => ../..
 
 require (
-	github.com/ardanlabs/kronk v1.23.7
+	github.com/ardanlabs/kronk v1.23.9
 	github.com/deadprogram/talkingheads v0.0.0-00010101000000-000000000000
 	github.com/urfave/cli/v2 v2.27.7
 )
