@@ -18,14 +18,36 @@ import (
 )
 
 const (
-	defaultTemperature = float32(0.6)
-	defaultTopP        = float32(0.95)
-	defaultTopK        = int32(20)
-	maxPredictTokens   = 2048
+	DefaultTemperature = float32(0.6)
+	DefaultTopP        = float32(0.95)
+	DefaultTopK        = int32(20)
+	DefaultMaxTokens   = 2048
+	DefaultContextSize = 4096
 )
+
+// Config holds the tunable parameters for an Actor.
+type Config struct {
+	Temperature float32
+	TopP        float32
+	TopK        int32
+	MaxTokens   int
+	ContextSize uint32
+}
+
+// DefaultConfig returns a Config populated with sensible defaults.
+func DefaultConfig() Config {
+	return Config{
+		Temperature: DefaultTemperature,
+		TopP:        DefaultTopP,
+		TopK:        DefaultTopK,
+		MaxTokens:   DefaultMaxTokens,
+		ContextSize: DefaultContextSize,
+	}
+}
 
 // Actor drives a conversation using a local llama.cpp model loaded via yzma.
 type Actor struct {
+	cfg          Config
 	llamaModel   llama.Model
 	llamaCtx     llama.Context
 	vocab        llama.Vocab
@@ -41,7 +63,7 @@ type Actor struct {
 // NewActor creates a new instance of Actor.
 // modelPath is the local path to a GGUF model file.
 // The llama.cpp shared libraries are loaded from the YZMA_LIB environment variable.
-func NewActor(modelPath string, commander Commander, moreFunc func(conversation *[]message.Message), outputFunc func(content string)) (*Actor, error) {
+func NewActor(modelPath string, cfg Config, commander Commander, moreFunc func(conversation *[]message.Message), outputFunc func(content string)) (*Actor, error) {
 	libPath := os.Getenv("YZMA_LIB")
 	if libPath == "" {
 		return nil, fmt.Errorf("YZMA_LIB environment variable not set")
@@ -62,7 +84,7 @@ func NewActor(modelPath string, commander Commander, moreFunc func(conversation 
 	}
 
 	ctxParams := llama.ContextDefaultParams()
-	ctxParams.NCtx = 4096
+	ctxParams.NCtx = cfg.ContextSize
 	lctx, err := llama.InitFromModel(mdl, ctxParams)
 	if err != nil {
 		llama.ModelFree(mdl)
@@ -77,9 +99,9 @@ func NewActor(modelPath string, commander Commander, moreFunc func(conversation 
 	}
 
 	sp := llama.DefaultSamplerParams()
-	sp.Temp = defaultTemperature
-	sp.TopP = defaultTopP
-	sp.TopK = defaultTopK
+	sp.Temp = cfg.Temperature
+	sp.TopP = cfg.TopP
+	sp.TopK = cfg.TopK
 	smpl := llama.NewSampler(mdl, llama.DefaultSamplers, sp)
 
 	toolsMap := make(map[string]Tool)
@@ -88,6 +110,7 @@ func NewActor(modelPath string, commander Commander, moreFunc func(conversation 
 	}
 
 	return &Actor{
+		cfg:                  cfg,
 		llamaModel:           mdl,
 		llamaCtx:             lctx,
 		vocab:                vocab,
@@ -174,7 +197,7 @@ func (a *Actor) generateTurn(ctx context.Context, conversation *[]message.Messag
 
 	// Trim oldest non-system messages if the prompt exceeds the context window.
 	if nCtx := int(llama.NCtx(a.llamaCtx)); nCtx > 0 {
-		maxPromptTokens := nCtx - maxPredictTokens
+		maxPromptTokens := nCtx - a.cfg.MaxTokens
 		for len(tokens) > maxPromptTokens && len(*conversation) > 2 {
 			// Drop the second message (oldest non-system entry) and re-tokenize.
 			log.Println("trimming oldest message from conversation to fit context window")
@@ -205,6 +228,8 @@ func (a *Actor) generateTurn(ctx context.Context, conversation *[]message.Messag
 	var sentenceBuf string
 	var inThinking bool
 	var thinkHold string
+	var inToolCall bool
+	var toolCallHold string
 	pieceBuf := make([]byte, 128)
 
 	emitSentence := func(s string) {
@@ -213,7 +238,7 @@ func (a *Actor) generateTurn(ctx context.Context, conversation *[]message.Messag
 		}
 	}
 
-	for i := 0; i < maxPredictTokens; i++ {
+	for i := 0; i < a.cfg.MaxTokens; i++ {
 		select {
 		case <-ctx.Done():
 			return "", nil, ctx.Err()
@@ -230,6 +255,7 @@ func (a *Actor) generateTurn(ctx context.Context, conversation *[]message.Messag
 			piece := string(pieceBuf[:n])
 			chunks = append(chunks, piece)
 			visible := filterThinkingPiece(piece, &inThinking, &thinkHold)
+			visible = filterToolCallPiece(visible, &inToolCall, &toolCallHold)
 			if visible != "" {
 				sentenceBuf += visible
 				sentenceBuf = flushSentences(sentenceBuf, emitSentence)
@@ -241,15 +267,25 @@ func (a *Actor) generateTurn(ctx context.Context, conversation *[]message.Messag
 		}
 	}
 
-	// Flush any partial tag hold buffer that turned out not to be a tag.
+	// Flush any partial tag hold buffers that turned out not to be tags.
 	if !inThinking && thinkHold != "" {
 		sentenceBuf += thinkHold
+	}
+	if !inToolCall && toolCallHold != "" {
+		sentenceBuf += toolCallHold
 	}
 
 	text := strings.TrimSpace(strings.TrimLeft(strings.Join(chunks, ""), "\n"))
 
 	toolCalls := message.ParseToolCalls(text)
 	if len(toolCalls) > 0 {
+		// Emit any text content that accompanied the tool calls (e.g. Gemma 4
+		// <turn>model text following </toolcall>) if it wasn't already streamed.
+		if spokenText := message.StripMarkup(text); spokenText != "" {
+			if remaining := strings.TrimSpace(sentenceBuf); remaining == "" {
+				emitSentence(spokenText)
+			}
+		}
 		return "", toolCalls, nil
 	}
 
@@ -283,6 +319,19 @@ func (a *Actor) callTools(ctx context.Context, toolCalls []message.ToolCall) []m
 
 	for _, toolCall := range toolCalls {
 		tool, exists := a.tools[toolCall.Function.Name]
+		if !exists {
+			// Fallback: try a normalized name match (strip underscores/hyphens,
+			// lowercase) to handle models that elide punctuation in tool names
+			// (e.g. Gemma 4 outputs "toolmovement" for "tool_movement").
+			norm := normalizeToolName(toolCall.Function.Name)
+			for registeredName, t := range a.tools {
+				if normalizeToolName(registeredName) == norm {
+					tool = t
+					exists = true
+					break
+				}
+			}
+		}
 		if !exists {
 			log.Printf("\u001b[91mUnknown tool: %s\u001b[0m\n", toolCall.Function.Name)
 			continue
@@ -379,6 +428,16 @@ func modelFilename(rawURL string) string {
 	return base
 }
 
+// normalizeToolName returns a lowercase version of name with underscores and
+// hyphens removed, used as a fallback key when a model elides punctuation from
+// tool names (e.g. Gemma 4 outputs "toolmovement" for "tool_movement").
+func normalizeToolName(name string) string {
+	name = strings.ToLower(name)
+	name = strings.ReplaceAll(name, "_", "")
+	name = strings.ReplaceAll(name, "-", "")
+	return name
+}
+
 // filterThinkingPiece processes a newly arrived piece of text, filtering out
 // content inside <think>...</think> blocks. inThinking and holdBuf are
 // persistent state across calls. Returns the visible (non-thinking) content.
@@ -407,6 +466,70 @@ func filterThinkingPiece(piece string, inThinking *bool, holdBuf *string) string
 			} else {
 				// No opening tag; hold any partial suffix that could start one.
 				partial := longestTagPrefix(combined, "<think>")
+				result += combined[:len(combined)-len(partial)]
+				*holdBuf = partial
+				combined = ""
+			}
+		}
+	}
+	return result
+}
+
+// filterToolCallPiece processes a newly arrived piece of text, filtering out
+// <toolcall>...</toolcall> blocks (Gemma 4 format) and any <turn>ROLE markers.
+// inToolCall and holdBuf are persistent state across calls.
+// Returns the visible (non-toolcall) content.
+func filterToolCallPiece(piece string, inToolCall *bool, holdBuf *string) string {
+	if piece == "" {
+		return ""
+	}
+	combined := *holdBuf + piece
+	*holdBuf = ""
+	result := ""
+
+	// suppressiblePrefixes lists patterns that must be suppressed but have no
+	// closing tag — used for partial-suffix hold detection.
+	suppressibleMarkers := []string{
+		"<turn>model", "<turn>user", "<turn>assistant", "<turn>system",
+	}
+
+	for combined != "" {
+		if *inToolCall {
+			idx := strings.Index(combined, "</toolcall>")
+			if idx >= 0 {
+				*inToolCall = false
+				combined = combined[idx+len("</toolcall>"):]
+			} else {
+				*holdBuf = longestTagPrefix(combined, "</toolcall>")
+				combined = ""
+			}
+		} else {
+			// Find earliest of <toolcall> or any <turn>ROLE marker.
+			tcIdx := strings.Index(combined, "<toolcall>")
+
+			turnIdx, turnLen := -1, 0
+			for _, marker := range suppressibleMarkers {
+				if idx := strings.Index(combined, marker); idx >= 0 && (turnIdx < 0 || idx < turnIdx) {
+					turnIdx, turnLen = idx, len(marker)
+				}
+			}
+
+			if tcIdx >= 0 && (turnIdx < 0 || tcIdx <= turnIdx) {
+				result += combined[:tcIdx]
+				*inToolCall = true
+				combined = combined[tcIdx+len("<toolcall>"):]
+			} else if turnIdx >= 0 {
+				result += combined[:turnIdx]
+				combined = combined[turnIdx+turnLen:]
+			} else {
+				// No full pattern; hold the longest suffix that could start one.
+				allTags := append([]string{"<toolcall>"}, suppressibleMarkers...)
+				partial := ""
+				for _, tag := range allTags {
+					if p := longestTagPrefix(combined, tag); len(p) > len(partial) {
+						partial = p
+					}
+				}
 				result += combined[:len(combined)-len(partial)]
 				*holdBuf = partial
 				combined = ""

@@ -116,3 +116,92 @@ func TestCallTools_MixedTools(t *testing.T) {
 		t.Errorf("expected 1 response (unknown skipped), got %d", len(resps))
 	}
 }
+
+// TestCallTools_NormalizedName verifies that a tool registered as "tool_movement"
+// is found when the model outputs the name without underscores ("toolmovement"),
+// which is the observed behaviour of Gemma 4 models.
+func TestCallTools_NormalizedName_Found(t *testing.T) {
+	mock := &mockTool{}
+	a := &Actor{
+		tools: map[string]Tool{
+			"tool_movement": mock,
+		},
+	}
+
+	toolCalls := []message.ToolCall{
+		{
+			Type: "function",
+			Function: message.ToolFunction{
+				Name:      "toolmovement",
+				Arguments: map[string]string{"command": "speak"},
+			},
+		},
+	}
+
+	resps := a.callTools(context.Background(), toolCalls)
+	if len(resps) != 1 {
+		t.Fatalf("expected 1 response via normalized lookup, got %d", len(resps))
+	}
+	if !mock.called {
+		t.Error("expected mock tool to be called")
+	}
+}
+
+// TestNormalizeToolName covers the normalizeToolName helper.
+func TestNormalizeToolName(t *testing.T) {
+	cases := []struct {
+		input string
+		want  string
+	}{
+		{"tool_movement", "toolmovement"},
+		{"toolmovement", "toolmovement"},
+		{"Tool_Movement", "toolmovement"},
+		{"tool-movement", "toolmovement"},
+		{"noop", "noop"},
+	}
+	for _, c := range cases {
+		got := normalizeToolName(c.input)
+		if got != c.want {
+			t.Errorf("normalizeToolName(%q) = %q, want %q", c.input, got, c.want)
+		}
+	}
+}
+
+// TestFilterToolCallPiece_SuppressesBlock verifies that <toolcall> content is
+// suppressed during streaming and text after </toolcall><turn>model is visible.
+func TestFilterToolCallPiece_SuppressesBlock(t *testing.T) {
+	var inToolCall bool
+	var holdBuf string
+
+	input := `<toolcall>{"name": "tool_movement", "arguments": {"command": "speak"}}</toolcall><turn>modelHello!`
+	visible := filterToolCallPiece(input, &inToolCall, &holdBuf)
+
+	if visible != "Hello!" {
+		t.Errorf("visible: got %q, want %q", visible, "Hello!")
+	}
+	if inToolCall {
+		t.Error("inToolCall should be false after closing tag")
+	}
+}
+
+func TestFilterToolCallPiece_StreamedPieces(t *testing.T) {
+	var inToolCall bool
+	var holdBuf string
+
+	pieces := []string{
+		"<toolcall>",
+		`{"name": "tool_movement", "arguments": {"command": "speak"}}`,
+		"</toolcall>",
+		"<turn>model",
+		"Hello!",
+	}
+
+	var visible string
+	for _, p := range pieces {
+		visible += filterToolCallPiece(p, &inToolCall, &holdBuf)
+	}
+
+	if visible != "Hello!" {
+		t.Errorf("visible: got %q, want %q", visible, "Hello!")
+	}
+}

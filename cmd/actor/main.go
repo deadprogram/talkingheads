@@ -58,6 +58,31 @@ func main() {
 				Usage: "baud rate for the serial port",
 				Value: 9600,
 			},
+			&cli.Float64Flag{
+				Name:  "temperature",
+				Usage: "sampling temperature",
+				Value: float64(actor.DefaultTemperature),
+			},
+			&cli.Float64Flag{
+				Name:  "top-p",
+				Usage: "top-p (nucleus) sampling threshold",
+				Value: float64(actor.DefaultTopP),
+			},
+			&cli.IntFlag{
+				Name:  "top-k",
+				Usage: "top-k sampling limit",
+				Value: int(actor.DefaultTopK),
+			},
+			&cli.IntFlag{
+				Name:  "max-tokens",
+				Usage: "maximum number of tokens to generate per turn",
+				Value: actor.DefaultMaxTokens,
+			},
+			&cli.IntFlag{
+				Name:  "context-size",
+				Usage: "KV cache / context window size in tokens",
+				Value: int(actor.DefaultContextSize),
+			},
 		},
 		Action: run,
 	}
@@ -148,7 +173,13 @@ func run(c *cli.Context) error {
 		log.Printf("Serial mode: sending action commands to %s at %d baud\n", serialPort, baudRate)
 	}
 
-	a, err := actor.NewActor(modelPath, commander, moreFunc, outputFunc)
+	a, err := actor.NewActor(modelPath, actor.Config{
+		Temperature: float32(c.Float64("temperature")),
+		TopP:        float32(c.Float64("top-p")),
+		TopK:        int32(c.Int("top-k")),
+		MaxTokens:   c.Int("max-tokens"),
+		ContextSize: uint32(c.Int("context-size")),
+	}, commander, moreFunc, outputFunc)
 	if err != nil {
 		return cli.Exit(fmt.Sprintf("failed to create actor: %v", err), 1)
 	}
