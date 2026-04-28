@@ -5,8 +5,9 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"strconv"
 
-	"github.com/ardanlabs/kronk/sdk/kronk/model"
+	"github.com/hybridgroup/yzma/pkg/message"
 	"go.bug.st/serial"
 )
 
@@ -56,7 +57,7 @@ type Movement struct {
 
 // RegisterMovement creates a new instance of the Movement tool and loads it
 // into the provided tools map. If commander is nil, a LogCommander is used.
-func RegisterMovement(tools map[string]Tool, commander Commander) model.D {
+func RegisterMovement(tools map[string]Tool, commander Commander) ToolDoc {
 	if commander == nil {
 		commander = &LogCommander{}
 	}
@@ -69,20 +70,20 @@ func RegisterMovement(tools map[string]Tool, commander Commander) model.D {
 	return rf.toolDocument()
 }
 
-func (rf *Movement) toolDocument() model.D {
-	return model.D{
+func (rf *Movement) toolDocument() ToolDoc {
+	return ToolDoc{
 		"type": "function",
-		"function": model.D{
+		"function": ToolDoc{
 			"name":        rf.name,
 			"description": "Control the head movement of the actor.",
-			"parameters": model.D{
+			"parameters": ToolDoc{
 				"type": "object",
-				"properties": model.D{
-					"command": model.D{
+				"properties": ToolDoc{
+					"command": ToolDoc{
 						"type":        "string",
 						"description": "The movement command to perform. Valid values are: 'look' (turn to angle), 'slowlook' (slowly turn to angle), 'headshake' (shake head to indicate no), 'wait' (idle movement), 'speak' (movement while speaking), 'stop' (stop and center).",
 					},
-					"angle": model.D{
+					"angle": ToolDoc{
 						"type":        "integer",
 						"description": "The angle in degrees (0-180) to look at. Required for 'look' and 'slowlook' commands. 90 is center, 0 is full right, 180 is full left.",
 						"minimum":     0,
@@ -96,16 +97,16 @@ func (rf *Movement) toolDocument() model.D {
 }
 
 // Call is the function that is called by the agent to move the actor when the model requests the tool with the specified parameters.
-func (rf *Movement) Call(ctx context.Context, toolCall model.ResponseToolCall) (resp model.D) {
+func (rf *Movement) Call(ctx context.Context, toolCall message.ToolCall) (resp string) {
 	defer func() {
 		if r := recover(); r != nil {
-			resp = toolErrorResponse(toolCall.ID, toolCall.Function.Name, fmt.Errorf("%s", r))
+			resp = toolErrorResponse(fmt.Errorf("%s", r))
 		}
 	}()
 
-	command, _ := toolCall.Function.Arguments["command"].(string)
+	command := toolCall.Function.Arguments["command"]
 	if command == "" {
-		return toolErrorResponse(toolCall.ID, toolCall.Function.Name, fmt.Errorf("missing required parameter: command"))
+		return toolErrorResponse(fmt.Errorf("missing required parameter: command"))
 	}
 
 	var serialCmd string
@@ -113,13 +114,13 @@ func (rf *Movement) Call(ctx context.Context, toolCall model.ResponseToolCall) (
 
 	switch command {
 	case "look", "slowlook":
-		angle, ok := toolCall.Function.Arguments["angle"]
+		angleStr, ok := toolCall.Function.Arguments["angle"]
 		if !ok {
-			return toolErrorResponse(toolCall.ID, toolCall.Function.Name, fmt.Errorf("angle required for %s command", command))
+			return toolErrorResponse(fmt.Errorf("angle required for %s command", command))
 		}
-		angleInt, ok := toInt(angle)
-		if !ok || angleInt < 0 || angleInt > 180 {
-			return toolErrorResponse(toolCall.ID, toolCall.Function.Name, fmt.Errorf("angle must be an integer between 0 and 180"))
+		angleInt, err := strconv.Atoi(angleStr)
+		if err != nil || angleInt < 0 || angleInt > 180 {
+			return toolErrorResponse(fmt.Errorf("angle must be an integer between 0 and 180"))
 		}
 		serialCmd = fmt.Sprintf("%s %d", command, angleInt)
 		successArgs = []any{"command", command, "angle", angleInt}
@@ -127,22 +128,11 @@ func (rf *Movement) Call(ctx context.Context, toolCall model.ResponseToolCall) (
 		serialCmd = command
 		successArgs = []any{"command", command}
 	default:
-		return toolErrorResponse(toolCall.ID, toolCall.Function.Name, fmt.Errorf("unknown command: %s", command))
+		return toolErrorResponse(fmt.Errorf("unknown command: %s", command))
 	}
 
 	if err := rf.commander.Send(serialCmd); err != nil {
-		return toolErrorResponse(toolCall.ID, toolCall.Function.Name, fmt.Errorf("sending command: %w", err))
+		return toolErrorResponse(fmt.Errorf("sending command: %w", err))
 	}
-	return toolSuccessResponse(toolCall.ID, toolCall.Function.Name, successArgs...)
-}
-
-// toInt converts a JSON-unmarshalled number (float64) or int to int.
-func toInt(v any) (int, bool) {
-	switch n := v.(type) {
-	case int:
-		return n, true
-	case float64:
-		return int(n), true
-	}
-	return 0, false
+	return toolSuccessResponse(successArgs...)
 }

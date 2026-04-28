@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ardanlabs/kronk/sdk/kronk/model"
+	"github.com/hybridgroup/yzma/pkg/message"
 )
 
 func TestRegisterMovement_AddsToMap(t *testing.T) {
@@ -25,9 +25,9 @@ func TestRegisterMovement_DocumentStructure(t *testing.T) {
 		t.Errorf("type: got %v, want %q", doc["type"], "function")
 	}
 
-	fn, ok := doc["function"].(model.D)
+	fn, ok := doc["function"].(ToolDoc)
 	if !ok {
-		t.Fatal("function field is not model.D")
+		t.Fatal("function field is not ToolDoc")
 	}
 	if fn["name"] != "tool_movement" {
 		t.Errorf("function name: got %v, want %q", fn["name"], "tool_movement")
@@ -36,13 +36,13 @@ func TestRegisterMovement_DocumentStructure(t *testing.T) {
 		t.Error("function description should not be empty")
 	}
 
-	params, ok := fn["parameters"].(model.D)
+	params, ok := fn["parameters"].(ToolDoc)
 	if !ok {
-		t.Fatal("parameters field is not model.D")
+		t.Fatal("parameters field is not ToolDoc")
 	}
-	props, ok := params["properties"].(model.D)
+	props, ok := params["properties"].(ToolDoc)
 	if !ok {
-		t.Fatal("properties field is not model.D")
+		t.Fatal("properties field is not ToolDoc")
 	}
 	if _, ok := props["command"]; !ok {
 		t.Error("expected 'command' property in tool document")
@@ -52,32 +52,28 @@ func TestRegisterMovement_DocumentStructure(t *testing.T) {
 	}
 }
 
+func makeToolCall(name string, args map[string]string) message.ToolCall {
+	return message.ToolCall{
+		Type: "function",
+		Function: message.ToolFunction{
+			Name:      name,
+			Arguments: args,
+		},
+	}
+}
+
 func TestMovementCall_Look(t *testing.T) {
 	tools := make(map[string]Tool)
 	RegisterMovement(tools, nil)
 
-	toolCall := model.ResponseToolCall{
-		ID: "tc-1",
-		Function: model.ResponseToolCallFunction{
-			Name:      "tool_movement",
-			Arguments: model.ToolCallArguments{"command": "look", "angle": float64(135)},
-		},
-	}
+	resp := tools["tool_movement"].Call(context.Background(),
+		makeToolCall("tool_movement", map[string]string{"command": "look", "angle": "135"}))
 
-	resp := tools["tool_movement"].Call(context.Background(), toolCall)
-
-	if resp["role"] != "tool" {
-		t.Errorf("role: got %v, want %q", resp["role"], "tool")
+	if !strings.Contains(resp, "SUCCESS") {
+		t.Errorf("expected SUCCESS in response, got: %s", resp)
 	}
-	content, ok := resp["content"].(string)
-	if !ok {
-		t.Fatal("content is not a string")
-	}
-	if !strings.Contains(content, "SUCCESS") {
-		t.Errorf("expected SUCCESS in content, got: %s", content)
-	}
-	if !strings.Contains(content, "look") {
-		t.Errorf("expected command in content, got: %s", content)
+	if !strings.Contains(resp, "look") {
+		t.Errorf("expected command in response, got: %s", resp)
 	}
 }
 
@@ -85,22 +81,11 @@ func TestMovementCall_SlowLook(t *testing.T) {
 	tools := make(map[string]Tool)
 	RegisterMovement(tools, nil)
 
-	toolCall := model.ResponseToolCall{
-		ID: "tc-2",
-		Function: model.ResponseToolCallFunction{
-			Name:      "tool_movement",
-			Arguments: model.ToolCallArguments{"command": "slowlook", "angle": float64(45)},
-		},
-	}
+	resp := tools["tool_movement"].Call(context.Background(),
+		makeToolCall("tool_movement", map[string]string{"command": "slowlook", "angle": "45"}))
 
-	resp := tools["tool_movement"].Call(context.Background(), toolCall)
-
-	content, ok := resp["content"].(string)
-	if !ok {
-		t.Fatal("content is not a string")
-	}
-	if !strings.Contains(content, "SUCCESS") {
-		t.Errorf("expected SUCCESS in content, got: %s", content)
+	if !strings.Contains(resp, "SUCCESS") {
+		t.Errorf("expected SUCCESS in response, got: %s", resp)
 	}
 }
 
@@ -108,22 +93,11 @@ func TestMovementCall_HeadShake(t *testing.T) {
 	tools := make(map[string]Tool)
 	RegisterMovement(tools, nil)
 
-	toolCall := model.ResponseToolCall{
-		ID: "tc-3",
-		Function: model.ResponseToolCallFunction{
-			Name:      "tool_movement",
-			Arguments: model.ToolCallArguments{"command": "headshake"},
-		},
-	}
+	resp := tools["tool_movement"].Call(context.Background(),
+		makeToolCall("tool_movement", map[string]string{"command": "headshake"}))
 
-	resp := tools["tool_movement"].Call(context.Background(), toolCall)
-
-	content, ok := resp["content"].(string)
-	if !ok {
-		t.Fatal("content is not a string")
-	}
-	if !strings.Contains(content, "SUCCESS") {
-		t.Errorf("expected SUCCESS in content, got: %s", content)
+	if !strings.Contains(resp, "SUCCESS") {
+		t.Errorf("expected SUCCESS in response, got: %s", resp)
 	}
 }
 
@@ -131,22 +105,11 @@ func TestMovementCall_Wait(t *testing.T) {
 	tools := make(map[string]Tool)
 	RegisterMovement(tools, nil)
 
-	toolCall := model.ResponseToolCall{
-		ID: "tc-4",
-		Function: model.ResponseToolCallFunction{
-			Name:      "tool_movement",
-			Arguments: model.ToolCallArguments{"command": "wait"},
-		},
-	}
+	resp := tools["tool_movement"].Call(context.Background(),
+		makeToolCall("tool_movement", map[string]string{"command": "wait"}))
 
-	resp := tools["tool_movement"].Call(context.Background(), toolCall)
-
-	content, ok := resp["content"].(string)
-	if !ok {
-		t.Fatal("content is not a string")
-	}
-	if !strings.Contains(content, "SUCCESS") {
-		t.Errorf("expected SUCCESS in content, got: %s", content)
+	if !strings.Contains(resp, "SUCCESS") {
+		t.Errorf("expected SUCCESS in response, got: %s", resp)
 	}
 }
 
@@ -154,22 +117,11 @@ func TestMovementCall_Speak(t *testing.T) {
 	tools := make(map[string]Tool)
 	RegisterMovement(tools, nil)
 
-	toolCall := model.ResponseToolCall{
-		ID: "tc-5",
-		Function: model.ResponseToolCallFunction{
-			Name:      "tool_movement",
-			Arguments: model.ToolCallArguments{"command": "speak"},
-		},
-	}
+	resp := tools["tool_movement"].Call(context.Background(),
+		makeToolCall("tool_movement", map[string]string{"command": "speak"}))
 
-	resp := tools["tool_movement"].Call(context.Background(), toolCall)
-
-	content, ok := resp["content"].(string)
-	if !ok {
-		t.Fatal("content is not a string")
-	}
-	if !strings.Contains(content, "SUCCESS") {
-		t.Errorf("expected SUCCESS in content, got: %s", content)
+	if !strings.Contains(resp, "SUCCESS") {
+		t.Errorf("expected SUCCESS in response, got: %s", resp)
 	}
 }
 
@@ -177,22 +129,11 @@ func TestMovementCall_Stop(t *testing.T) {
 	tools := make(map[string]Tool)
 	RegisterMovement(tools, nil)
 
-	toolCall := model.ResponseToolCall{
-		ID: "tc-6",
-		Function: model.ResponseToolCallFunction{
-			Name:      "tool_movement",
-			Arguments: model.ToolCallArguments{"command": "stop"},
-		},
-	}
+	resp := tools["tool_movement"].Call(context.Background(),
+		makeToolCall("tool_movement", map[string]string{"command": "stop"}))
 
-	resp := tools["tool_movement"].Call(context.Background(), toolCall)
-
-	content, ok := resp["content"].(string)
-	if !ok {
-		t.Fatal("content is not a string")
-	}
-	if !strings.Contains(content, "SUCCESS") {
-		t.Errorf("expected SUCCESS in content, got: %s", content)
+	if !strings.Contains(resp, "SUCCESS") {
+		t.Errorf("expected SUCCESS in response, got: %s", resp)
 	}
 }
 
@@ -200,22 +141,11 @@ func TestMovementCall_MissingCommand(t *testing.T) {
 	tools := make(map[string]Tool)
 	RegisterMovement(tools, nil)
 
-	toolCall := model.ResponseToolCall{
-		ID: "tc-7",
-		Function: model.ResponseToolCallFunction{
-			Name:      "tool_movement",
-			Arguments: model.ToolCallArguments{},
-		},
-	}
+	resp := tools["tool_movement"].Call(context.Background(),
+		makeToolCall("tool_movement", map[string]string{}))
 
-	resp := tools["tool_movement"].Call(context.Background(), toolCall)
-
-	content, ok := resp["content"].(string)
-	if !ok {
-		t.Fatal("content is not a string")
-	}
-	if !strings.Contains(content, "FAILED") {
-		t.Errorf("expected FAILED in content, got: %s", content)
+	if !strings.Contains(resp, "FAILED") {
+		t.Errorf("expected FAILED in response, got: %s", resp)
 	}
 }
 
@@ -223,22 +153,11 @@ func TestMovementCall_LookMissingAngle(t *testing.T) {
 	tools := make(map[string]Tool)
 	RegisterMovement(tools, nil)
 
-	toolCall := model.ResponseToolCall{
-		ID: "tc-8",
-		Function: model.ResponseToolCallFunction{
-			Name:      "tool_movement",
-			Arguments: model.ToolCallArguments{"command": "look"},
-		},
-	}
+	resp := tools["tool_movement"].Call(context.Background(),
+		makeToolCall("tool_movement", map[string]string{"command": "look"}))
 
-	resp := tools["tool_movement"].Call(context.Background(), toolCall)
-
-	content, ok := resp["content"].(string)
-	if !ok {
-		t.Fatal("content is not a string")
-	}
-	if !strings.Contains(content, "FAILED") {
-		t.Errorf("expected FAILED in content, got: %s", content)
+	if !strings.Contains(resp, "FAILED") {
+		t.Errorf("expected FAILED in response, got: %s", resp)
 	}
 }
 
@@ -246,22 +165,11 @@ func TestMovementCall_LookAngleOutOfRange(t *testing.T) {
 	tools := make(map[string]Tool)
 	RegisterMovement(tools, nil)
 
-	toolCall := model.ResponseToolCall{
-		ID: "tc-9",
-		Function: model.ResponseToolCallFunction{
-			Name:      "tool_movement",
-			Arguments: model.ToolCallArguments{"command": "look", "angle": float64(200)},
-		},
-	}
+	resp := tools["tool_movement"].Call(context.Background(),
+		makeToolCall("tool_movement", map[string]string{"command": "look", "angle": "200"}))
 
-	resp := tools["tool_movement"].Call(context.Background(), toolCall)
-
-	content, ok := resp["content"].(string)
-	if !ok {
-		t.Fatal("content is not a string")
-	}
-	if !strings.Contains(content, "FAILED") {
-		t.Errorf("expected FAILED in content, got: %s", content)
+	if !strings.Contains(resp, "FAILED") {
+		t.Errorf("expected FAILED in response, got: %s", resp)
 	}
 }
 
@@ -269,21 +177,10 @@ func TestMovementCall_UnknownCommand(t *testing.T) {
 	tools := make(map[string]Tool)
 	RegisterMovement(tools, nil)
 
-	toolCall := model.ResponseToolCall{
-		ID: "tc-10",
-		Function: model.ResponseToolCallFunction{
-			Name:      "tool_movement",
-			Arguments: model.ToolCallArguments{"command": "dance"},
-		},
-	}
+	resp := tools["tool_movement"].Call(context.Background(),
+		makeToolCall("tool_movement", map[string]string{"command": "dance"}))
 
-	resp := tools["tool_movement"].Call(context.Background(), toolCall)
-
-	content, ok := resp["content"].(string)
-	if !ok {
-		t.Fatal("content is not a string")
-	}
-	if !strings.Contains(content, "FAILED") {
-		t.Errorf("expected FAILED in content, got: %s", content)
+	if !strings.Contains(resp, "FAILED") {
+		t.Errorf("expected FAILED in response, got: %s", resp)
 	}
 }

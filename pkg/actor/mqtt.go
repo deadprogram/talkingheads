@@ -5,8 +5,8 @@ import (
 	"log"
 	"regexp"
 
-	"github.com/ardanlabs/kronk/sdk/kronk/model"
 	mqtt "github.com/eclipse/paho.mqtt.golang"
+	"github.com/hybridgroup/yzma/pkg/message"
 )
 
 // MQTTListener connects to an MQTT broker and wires up an Actor to receive
@@ -95,15 +95,15 @@ func (l *MQTTListener) enqueue(text string) {
 // MoreFunc returns a moreConversationFunc that blocks until at least one MQTT
 // message is available, then drains all buffered messages and appends each as
 // a user turn. Returns without appending if the listener is closed.
-func (l *MQTTListener) MoreFunc() func(*[]model.D) {
-	return func(conversation *[]model.D) {
+func (l *MQTTListener) MoreFunc() func(*[]message.Message) {
+	return func(conversation *[]message.Message) {
 		// Block until the first message arrives or the listener is closed.
 		select {
 		case text, ok := <-l.incoming:
 			if !ok || text == "" {
 				return
 			}
-			*conversation = append(*conversation, model.D{"role": "user", "content": text})
+			*conversation = append(*conversation, message.Chat{Role: "user", Content: text})
 		case <-l.done:
 			return
 		}
@@ -115,7 +115,7 @@ func (l *MQTTListener) MoreFunc() func(*[]model.D) {
 				if !ok || text == "" {
 					return
 				}
-				*conversation = append(*conversation, model.D{"role": "user", "content": text})
+				*conversation = append(*conversation, message.Chat{Role: "user", Content: text})
 			default:
 				return
 			}

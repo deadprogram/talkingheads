@@ -5,66 +5,111 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
-	"github.com/ardanlabs/kronk/sdk/kronk"
-	"github.com/ardanlabs/kronk/sdk/kronk/model"
-	"github.com/ardanlabs/kronk/sdk/tools/defaults"
-	"github.com/ardanlabs/kronk/sdk/tools/libs"
-	"github.com/ardanlabs/kronk/sdk/tools/models"
+	"github.com/hybridgroup/yzma/pkg/download"
+	"github.com/hybridgroup/yzma/pkg/llama"
+	"github.com/hybridgroup/yzma/pkg/message"
+	"github.com/hybridgroup/yzma/pkg/template"
 )
 
 const (
-	defaultTemperature = 0.1
-	defaultTopP        = 0.1
-	defaultTopK        = 1
+	defaultTemperature = float32(0.1)
+	defaultTopP        = float32(0.1)
+	defaultTopK        = int32(1)
+	maxPredictTokens   = 2048
 )
 
+// Actor drives a conversation using a local llama.cpp model loaded via yzma.
 type Actor struct {
-	krn *kronk.Kronk
+	llamaModel   llama.Model
+	llamaCtx     llama.Context
+	vocab        llama.Vocab
+	sampler      llama.Sampler
+	chatTemplate string
 
-	// function that gets more conversation input and appends it to the conversation.
-	// This allows the actor to get more input from the user or from MQTT server.
-	moreConversationFunc func(conversation *[]model.D)
-	// outputFunc is called with the actor's text response each time the model produces one.
-	outputFunc    func(content string)
-	tools         map[string]Tool
-	toolDocuments []model.D
+	moreConversationFunc func(conversation *[]message.Message)
+	outputFunc           func(content string)
+	tools                map[string]Tool
+	toolsJSON            string
 }
 
 // NewActor creates a new instance of Actor.
-func NewActor(mp models.Path, commander Commander, moreFunc func(conversation *[]model.D), outputFunc func(content string)) (*Actor, error) {
-	if err := kronk.Init(); err != nil {
-		return nil, fmt.Errorf("unable to init kronk: %w", err)
+// modelPath is the local path to a GGUF model file.
+// The llama.cpp shared libraries are loaded from the YZMA_LIB environment variable.
+func NewActor(modelPath string, commander Commander, moreFunc func(conversation *[]message.Message), outputFunc func(content string)) (*Actor, error) {
+	libPath := os.Getenv("YZMA_LIB")
+	if libPath == "" {
+		return nil, fmt.Errorf("YZMA_LIB environment variable not set")
 	}
 
-	krn, err := newKronk(mp)
+	if err := llama.Load(libPath); err != nil {
+		return nil, fmt.Errorf("unable to load llama.cpp: %w", err)
+	}
+
+	llama.LogSet(llama.LogSilent())
+	llama.Init()
+
+	log.Println("loading model...")
+
+	mdl, err := llama.ModelLoadFromFile(modelPath, llama.ModelDefaultParams())
 	if err != nil {
-		return nil, fmt.Errorf("unable to create kronk instance: %w", err)
+		return nil, fmt.Errorf("unable to load model: %w", err)
 	}
 
-	// Build tool documents by registering each tool with its own tools map.
+	lctx, err := llama.InitFromModel(mdl, llama.ContextDefaultParams())
+	if err != nil {
+		llama.ModelFree(mdl)
+		return nil, fmt.Errorf("unable to create context: %w", err)
+	}
+
+	vocab := llama.ModelGetVocab(mdl)
+
+	chatTmpl := llama.ModelChatTemplate(mdl, "")
+	if chatTmpl == "" {
+		chatTmpl = "chatml"
+	}
+
+	sp := llama.DefaultSamplerParams()
+	sp.Temp = defaultTemperature
+	sp.TopP = defaultTopP
+	sp.TopK = defaultTopK
+	smpl := llama.NewSampler(mdl, llama.DefaultSamplers, sp)
+
 	toolsMap := make(map[string]Tool)
-	toolDocuments := []model.D{
+	toolDocs := []ToolDoc{
 		RegisterMovement(toolsMap, commander),
 	}
 
-	actor := Actor{
-		krn:                  krn,
+	return &Actor{
+		llamaModel:           mdl,
+		llamaCtx:             lctx,
+		vocab:                vocab,
+		sampler:              smpl,
+		chatTemplate:         chatTmpl,
 		moreConversationFunc: moreFunc,
 		outputFunc:           outputFunc,
 		tools:                toolsMap,
-		toolDocuments:        toolDocuments,
-	}
+		toolsJSON:            marshalToolDocs(toolDocs),
+	}, nil
+}
 
-	return &actor, nil
+// Close releases model and context resources.
+func (a *Actor) Close() {
+	llama.SamplerFree(a.sampler)
+	llama.Free(a.llamaCtx)
+	llama.ModelFree(a.llamaModel)
+	llama.Close()
 }
 
 // Run starts the actor and runs the chat loop.
 func (a *Actor) Run(ctx context.Context, systemPrompt string) error {
-	conversation := []model.D{
-		{"role": "system", "content": systemPrompt},
+	conversation := []message.Message{
+		message.Chat{Role: "system", Content: injectToolsIntoSystemPrompt(systemPrompt, a.toolsJSON)},
 	}
 
 	needMoreInput := true
@@ -76,19 +121,14 @@ func (a *Actor) Run(ctx context.Context, systemPrompt string) error {
 			}
 		}
 
-		content, toolCalls, _, err := a.streamModelTurn(ctx, conversation)
+		content, toolCalls, err := a.generateTurn(ctx, conversation)
 		if err != nil {
 			return err
 		}
 
 		if len(toolCalls) > 0 {
 			a.appendToolCalls(&conversation, toolCalls)
-
-			results := a.callTools(ctx, toolCalls)
-			if len(results) > 0 {
-				conversation = append(conversation, results...)
-			}
-
+			conversation = append(conversation, a.callTools(ctx, toolCalls)...)
 			needMoreInput = false
 			continue
 		}
@@ -99,7 +139,7 @@ func (a *Actor) Run(ctx context.Context, systemPrompt string) error {
 }
 
 // GetMore gets more input and appends it to the conversation.
-func (a *Actor) GetMore(conversation *[]model.D) bool {
+func (a *Actor) GetMore(conversation *[]message.Message) bool {
 	if a.moreConversationFunc == nil {
 		return false
 	}
@@ -108,31 +148,32 @@ func (a *Actor) GetMore(conversation *[]model.D) bool {
 	return true
 }
 
-// streamModelTurn sends the conversation to the model and streams back the
-// response. It returns the assembled text content, any tool calls, and usage.
-func (a *Actor) streamModelTurn(ctx context.Context, conversation []model.D) (string, []model.ResponseToolCall, *model.Usage, error) {
-	d := model.D{
-		"messages":    conversation,
-		"temperature": defaultTemperature,
-		"top_p":       defaultTopP,
-		"top_k":       defaultTopK,
-		"tools":       a.toolDocuments,
-		"tool_choice": "auto",
+// generateTurn applies the chat template, runs inference, and returns the text
+// content and any tool calls parsed from the response.
+func (a *Actor) generateTurn(ctx context.Context, conversation []message.Message) (string, []message.ToolCall, error) {
+	prompt, err := template.Apply(a.chatTemplate, conversation, true)
+	if err != nil {
+		return "", nil, fmt.Errorf("error applying chat template: %w", err)
 	}
 
-	callCtx, cancelCall := context.WithTimeout(ctx, 5*time.Minute)
-	defer cancelCall()
-
-	ch, err := a.krn.ChatStreaming(callCtx, d)
+	mem, err := llama.GetMemory(a.llamaCtx)
 	if err != nil {
-		return "", nil, nil, fmt.Errorf("error chat streaming: %w", err)
+		return "", nil, fmt.Errorf("error getting memory: %w", err)
+	}
+	if err := llama.MemoryClear(mem, true); err != nil {
+		return "", nil, fmt.Errorf("error clearing memory: %w", err)
+	}
+
+	llama.SamplerReset(a.sampler)
+
+	tokens := llama.Tokenize(a.vocab, prompt, true, false)
+	if _, err := llama.Decode(a.llamaCtx, llama.BatchGetOne(tokens)); err != nil {
+		return "", nil, fmt.Errorf("error decoding prompt: %w", err)
 	}
 
 	var chunks []string
 	var sentenceBuf string
-	var lastResp model.ChatResponse
-	firstChunk := true
-	reasonThinking := false
+	pieceBuf := make([]byte, 128)
 
 	emitSentence := func(s string) {
 		if a.outputFunc != nil {
@@ -140,86 +181,65 @@ func (a *Actor) streamModelTurn(ctx context.Context, conversation []model.D) (st
 		}
 	}
 
-	for resp := range ch {
-		lastResp = resp
-
-		if len(resp.Choices) == 0 {
-			continue
-		}
-
-		if firstChunk {
-			firstChunk = false
-		}
-
-		switch resp.Choices[0].FinishReason() {
-		case model.FinishReasonError:
-			return "", nil, lastResp.Usage, fmt.Errorf("error from model: %s", resp.Choices[0].Delta.Content)
-
-		case model.FinishReasonStop:
-			if remaining := strings.TrimSpace(sentenceBuf); remaining != "" {
-				emitSentence(remaining)
-			}
-			text := strings.TrimLeft(strings.Join(chunks, ""), "\n")
-			return text, nil, lastResp.Usage, nil
-
-		case model.FinishReasonTool:
-			return "", resp.Choices[0].Delta.ToolCalls, lastResp.Usage, nil
-
+	for i := 0; i < maxPredictTokens; i++ {
+		select {
+		case <-ctx.Done():
+			return "", nil, ctx.Err()
 		default:
-			delta := resp.Choices[0].Delta
-			if delta.Content != "" {
-				if reasonThinking {
-					reasonThinking = false
-				}
+		}
 
-				chunks = append(chunks, delta.Content)
-				sentenceBuf += delta.Content
-				sentenceBuf = flushSentences(sentenceBuf, emitSentence)
-			}
+		token := llama.SamplerSample(a.sampler, a.llamaCtx, -1)
+		if llama.VocabIsEOG(a.vocab, token) {
+			break
+		}
+
+		n := llama.TokenToPiece(a.vocab, token, pieceBuf, 0, true)
+		if n > 0 {
+			piece := string(pieceBuf[:n])
+			chunks = append(chunks, piece)
+			sentenceBuf += piece
+			sentenceBuf = flushSentences(sentenceBuf, emitSentence)
+		}
+
+		if _, err := llama.Decode(a.llamaCtx, llama.BatchGetOne([]llama.Token{token})); err != nil {
+			break
 		}
 	}
 
-	// Stream ended without an explicit finish reason.
+	text := strings.TrimSpace(strings.TrimLeft(strings.Join(chunks, ""), "\n"))
+
+	toolCalls := message.ParseToolCalls(text)
+	if len(toolCalls) > 0 {
+		return "", toolCalls, nil
+	}
+
 	if remaining := strings.TrimSpace(sentenceBuf); remaining != "" {
 		emitSentence(remaining)
 	}
-	text := strings.TrimLeft(strings.Join(chunks, ""), "\n")
-	return text, nil, lastResp.Usage, nil
+
+	return text, nil, nil
 }
 
 // appendToolCalls adds the assistant's tool call request to the conversation.
-func (a *Actor) appendToolCalls(conversation *[]model.D, toolCalls []model.ResponseToolCall) {
-	var toolCallDocs []model.D
-	for _, tc := range toolCalls {
-		argsJSON, _ := json.Marshal(tc.Function.Arguments)
-		toolCallDocs = append(toolCallDocs, model.D{
-			"id":   tc.ID,
-			"type": "function",
-			"function": model.D{
-				"name":      tc.Function.Name,
-				"arguments": string(argsJSON),
-			},
-		})
-	}
-
-	*conversation = append(*conversation, model.D{
-		"role":       "assistant",
-		"tool_calls": toolCallDocs,
+func (a *Actor) appendToolCalls(conversation *[]message.Message, toolCalls []message.ToolCall) {
+	*conversation = append(*conversation, message.Tool{
+		Role:      "assistant",
+		ToolCalls: toolCalls,
 	})
 }
 
 // appendAssistant adds the actor's text response to the conversation.
-func (a *Actor) appendAssistant(conversation *[]model.D, content string) {
+func (a *Actor) appendAssistant(conversation *[]message.Message, content string) {
 	if content == "" {
 		return
 	}
 
-	*conversation = append(*conversation, model.D{"role": "assistant", "content": content})
+	*conversation = append(*conversation, message.Chat{Role: "assistant", Content: content})
 }
 
 // callTools looks up requested tools by name and executes them.
-func (a *Actor) callTools(ctx context.Context, toolCalls []model.ResponseToolCall) []model.D {
-	resps := make([]model.D, 0, len(toolCalls))
+func (a *Actor) callTools(ctx context.Context, toolCalls []message.ToolCall) []message.Message {
+	resps := make([]message.Message, 0, len(toolCalls))
 
 	for _, toolCall := range toolCalls {
 		tool, exists := a.tools[toolCall.Function.Name]
@@ -230,47 +250,93 @@ func (a *Actor) callTools(ctx context.Context, toolCalls []model.ResponseToolCal
 
 		log.Printf("\u001b[92m%s(%v)\u001b[0m: ", toolCall.Function.Name, toolCall.Function.Arguments)
 
-		resp := tool.Call(ctx, toolCall)
-
-		content, _ := resp["content"].(string)
+		content := tool.Call(ctx, toolCall)
 		if strings.Contains(content, `"FAILED"`) {
 			log.Printf("\u001b[91m%s\u001b[0m\n", content)
 		}
 
-		resps = append(resps, resp)
+		resps = append(resps, message.ToolResponse{
+			Role:    "tool",
+			Name:    toolCall.Function.Name,
+			Content: content,
+		})
 	}
 
 	return resps
 }
 
-// InstallSystem installs necessary system components like models and libraries, and returns the path to the installed model.
-// InstallSystem downloads the model from the given URL and installs the
-// required llama.cpp libraries. It returns the path to the installed model.
-func InstallSystem(modelURL string) (models.Path, error) {
+// InstallSystem downloads the llama.cpp libraries (to YZMA_LIB) and a model
+// from the given URL (to ~/models/). It returns the local path to the model file.
+func InstallSystem(modelURL string) (string, error) {
+	libPath := os.Getenv("YZMA_LIB")
+	if libPath == "" {
+		return "", fmt.Errorf("YZMA_LIB environment variable not set")
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Minute)
 	defer cancel()
 
-	// Install llama.cpp libraries.
-	libs, err := libs.New(libs.WithVersion(defaults.LibVersion("")))
-	if err != nil {
-		return models.Path{}, err
-	}
-	if _, err := libs.Download(ctx, kronk.FmtLogger); err != nil {
-		return models.Path{}, fmt.Errorf("unable to install llama.cpp: %w", err)
+	if !download.AlreadyInstalled(libPath) {
+		version, err := download.LlamaLatestVersion()
+		if err != nil {
+			return "", fmt.Errorf("unable to get latest llama.cpp version: %w", err)
+		}
+
+		log.Println("installing llama.cpp libraries...")
+		if err := download.GetWithContext(ctx, runtime.GOARCH, runtime.GOOS, "cpu", version, libPath, download.ProgressTracker); err != nil {
+			return "", fmt.Errorf("unable to install llama.cpp: %w", err)
+		}
 	}
 
-	// Download model.
-	mdls, err := models.New()
-	if err != nil {
-		return models.Path{}, fmt.Errorf("unable to create models manager: %w", err)
+	modelsDir := download.DefaultModelsDir()
+	if err := os.MkdirAll(modelsDir, 0o750); err != nil {
+		return "", fmt.Errorf("unable to create models directory: %w", err)
 	}
 
-	mp, err := mdls.Download(ctx, kronk.FmtLogger, modelURL, "")
-	if err != nil {
-		return models.Path{}, fmt.Errorf("unable to install model: %w", err)
+	modelPath := filepath.Join(modelsDir, modelFilename(modelURL))
+	log.Println("downloading model...")
+	if err := download.GetModelWithContext(ctx, modelURL, modelPath, download.ProgressTracker); err != nil {
+		return "", fmt.Errorf("unable to download model: %w", err)
 	}
 
-	return mp, nil
+	return modelPath, nil
+}
+
+// marshalToolDocs formats a slice of tool documents as a JSON array string for
+// injection into the system prompt.
+func marshalToolDocs(docs []ToolDoc) string {
+	b, err := json.MarshalIndent(docs, "", "  ")
+	if err != nil {
+		return "[]"
+	}
+	return string(b)
+}
+
+// injectToolsIntoSystemPrompt appends the tool definitions and usage instructions
+// to the system prompt.
+func injectToolsIntoSystemPrompt(systemPrompt, toolsJSON string) string {
+	if toolsJSON == "" || toolsJSON == "[]" {
+		return systemPrompt
+	}
+	return systemPrompt + fmt.Sprintf(`
+
+You have access to the following tools:
+%s
+
+When you need to use a tool, respond with a tool call in the following format:
+<tool_call>
+{"name": "function_name", "arguments": {"arg1": "value1"}}
+</tool_call>
+After receiving tool results, continue your response normally.`, toolsJSON)
+}
+
+// modelFilename extracts a safe filename from a model URL.
+func modelFilename(rawURL string) string {
+	base := filepath.Base(rawURL)
+	if i := strings.IndexByte(base, '?'); i >= 0 {
+		base = base[:i]
+	}
+	return base
 }
 
 // flushSentences calls fn for each complete sentence found in buf (delimited
@@ -297,18 +363,4 @@ func flushSentences(buf string, fn func(string)) string {
 		buf = strings.TrimLeft(buf[idx+1:], " \n\t")
 	}
 	return buf
-}
-
-func newKronk(mp models.Path) (*kronk.Kronk, error) {
-	log.Println("loading model...")
-
-	krn, err := kronk.New(
-		model.WithModelFiles(mp.ModelFiles),
-		model.WithNGpuLayers(0),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("unable to create inference model: %w", err)
-	}
-
-	return krn, nil
 }

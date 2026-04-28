@@ -1,7 +1,14 @@
 .ONESHELL:
 
+test:
+	go test -v $(shell go list ./pkg/... | grep -v hotmic)
+
 show:
 	tmuxinator s talkingheads -p ./talkingheads.yml
+
+clean:
+	rm -rf build
+	mkdir build
 
 actor:
 	cd cmd/actor && go build -o ../../build/actor

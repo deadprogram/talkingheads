@@ -10,9 +10,8 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/ardanlabs/kronk/sdk/kronk/model"
-	"github.com/ardanlabs/kronk/sdk/tools/models"
 	"github.com/deadprogram/talkingheads/pkg/actor"
+	"github.com/hybridgroup/yzma/pkg/message"
 	"github.com/urfave/cli/v2"
 )
 
@@ -84,23 +83,20 @@ func run(c *cli.Context) error {
 		return cli.Exit("--model-url and --model-path are mutually exclusive", 1)
 	}
 
-	var mp models.Path
 	var err error
 
 	if modelURL != "" {
 		log.Println("downloading model, this may take a while...")
-		mp, err = actor.InstallSystem(modelURL)
+		modelPath, err = actor.InstallSystem(modelURL)
 		if err != nil {
 			return cli.Exit(fmt.Sprintf("failed to install model: %v", err), 1)
 		}
-	} else {
-		mp = models.Path{ModelFiles: []string{modelPath}}
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	var moreFunc func(*[]model.D)
+	var moreFunc func(*[]message.Message)
 	var outputFunc func(string)
 
 	if server != "" {
@@ -119,7 +115,7 @@ func run(c *cli.Context) error {
 		log.Printf("MQTT mode: listening on ask/%s, publishing to speak/%s\n", name, name)
 	} else {
 		scanner := bufio.NewScanner(os.Stdin)
-		moreFunc = func(conversation *[]model.D) {
+		moreFunc = func(conversation *[]message.Message) {
 			fmt.Print("\nYou: ")
 			if !scanner.Scan() {
 				stop()
@@ -129,7 +125,7 @@ func run(c *cli.Context) error {
 			if line == "" {
 				return
 			}
-			*conversation = append(*conversation, model.D{"role": "user", "content": line})
+			*conversation = append(*conversation, message.Chat{Role: "user", Content: line})
 		}
 		outputFunc = func(content string) {
 			fmt.Printf("\nActor: %s\n", content)
@@ -152,10 +148,11 @@ func run(c *cli.Context) error {
 		log.Printf("Serial mode: sending action commands to %s at %d baud\n", serialPort, baudRate)
 	}
 
-	a, err := actor.NewActor(mp, commander, moreFunc, outputFunc)
+	a, err := actor.NewActor(modelPath, commander, moreFunc, outputFunc)
 	if err != nil {
 		return cli.Exit(fmt.Sprintf("failed to create actor: %v", err), 1)
 	}
+	defer a.Close()
 
 	fmt.Println("Actor ready. Use Ctrl+C or Ctrl+D to quit.")
 
