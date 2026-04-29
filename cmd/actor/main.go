@@ -88,6 +88,11 @@ func main() {
 				Usage: "enable injecting tool definitions into the system prompt (useful for models with native tool-call support)",
 				Value: true,
 			},
+			&cli.BoolFlag{
+				Name:  "enable-thinking",
+				Usage: "enable thinking/reasoning mode for models that support it (e.g. Qwen3); disable to suppress chain-of-thought output",
+				Value: false,
+			},
 		},
 		Action: run,
 	}
@@ -179,12 +184,13 @@ func run(c *cli.Context) error {
 	}
 
 	a, err := actor.NewActor(modelPath, actor.Config{
-		Temperature: float32(c.Float64("temperature")),
-		TopP:        float32(c.Float64("top-p")),
-		TopK:        int32(c.Int("top-k")),
-		MaxTokens:   c.Int("max-tokens"),
-		ContextSize: uint32(c.Int("context-size")),
-		InjectTools: c.Bool("inject-tools"),
+		Temperature:    float32(c.Float64("temperature")),
+		TopP:           float32(c.Float64("top-p")),
+		TopK:           int32(c.Int("top-k")),
+		MaxTokens:      c.Int("max-tokens"),
+		ContextSize:    uint32(c.Int("context-size")),
+		InjectTools:    c.Bool("inject-tools"),
+		EnableThinking: c.Bool("enable-thinking"),
 	}, commander, moreFunc, outputFunc)
 	if err != nil {
 		return cli.Exit(fmt.Sprintf("failed to create actor: %v", err), 1)

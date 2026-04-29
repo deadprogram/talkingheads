@@ -135,6 +135,9 @@ func (l *MQTTListener) OutputFunc() func(string) {
 
 		content = removeEmoji(content)
 		content = removeOtherUnwantedChars(content)
+		if len(content) == 0 {
+			return
+		}
 		payload, err := json.Marshal(struct {
 			Who  string `json:"who"`
 			What string `json:"what"`

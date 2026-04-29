@@ -40,17 +40,23 @@ type Config struct {
 	// appended to the system prompt. Defaults to true. Set to false for models
 	// that have native tool-call support baked into their chat template.
 	InjectTools bool
+	// EnableThinking controls whether thinking/reasoning mode is enabled for
+	// models that support it (e.g. Qwen3). When false the model is instructed
+	// to skip chain-of-thought reasoning and respond directly. Defaults to
+	// false to avoid spoken thinking content being published via MQTT.
+	EnableThinking bool
 }
 
 // DefaultConfig returns a Config populated with sensible defaults.
 func DefaultConfig() Config {
 	return Config{
-		Temperature: DefaultTemperature,
-		TopP:        DefaultTopP,
-		TopK:        DefaultTopK,
-		MaxTokens:   DefaultMaxTokens,
-		ContextSize: DefaultContextSize,
-		InjectTools: true,
+		Temperature:    DefaultTemperature,
+		TopP:           DefaultTopP,
+		TopK:           DefaultTopK,
+		MaxTokens:      DefaultMaxTokens,
+		ContextSize:    DefaultContextSize,
+		InjectTools:    true,
+		EnableThinking: false,
 	}
 }
 
@@ -177,14 +183,14 @@ func (a *Actor) Run(ctx context.Context, systemPrompt string) error {
 
 			if hadText {
 				// Text was spoken alongside the tool calls — record the full
-				// exchange so subsequent turns have correct context.
-				a.appendToolCalls(&conversation, toolCalls)
+				// exchange (including spoken text) so subsequent turns have correct context.
+				a.appendToolCalls(&conversation, toolCalls, content)
 				conversation = append(conversation, toolResults...)
 				consecutiveToolOnlyTurns = 0
 				needMoreInput = true
 			} else {
 				consecutiveToolOnlyTurns++
-				a.appendToolCalls(&conversation, toolCalls)
+				a.appendToolCalls(&conversation, toolCalls, "")
 				conversation = append(conversation, toolResults...)
 				if consecutiveToolOnlyTurns >= maxConsecutiveToolOnlyTurns {
 					// Still no text after nudge — give up and wait for new input.
@@ -196,7 +202,7 @@ func (a *Actor) Run(ctx context.Context, systemPrompt string) error {
 					// give a verbal response — tool calls alone are not enough.
 					conversation = append(conversation, message.Chat{
 						Role:    "user",
-						Content: "(Please also provide a verbal response alongside your actions.)",
+						Content: "You used tools but said nothing. You MUST include spoken words in your response — answer the question with actual sentences, not just tool calls.",
 					})
 					log.Printf("tool-only turn %d/%d, nudging for verbal response", consecutiveToolOnlyTurns, maxConsecutiveToolOnlyTurns)
 					needMoreInput = false
@@ -226,7 +232,8 @@ func (a *Actor) GetMore(conversation *[]message.Message) bool {
 // The conversation pointer may be updated to trim old messages if the prompt
 // exceeds the model's context window.
 func (a *Actor) generateTurn(ctx context.Context, conversation *[]message.Message) (string, bool, []message.ToolCall, error) {
-	prompt, err := template.Apply(a.chatTemplate, *conversation, true)
+	tmplOpts := template.Options{EnableThinking: a.cfg.EnableThinking}
+	prompt, err := template.ApplyWithOptions(a.chatTemplate, *conversation, true, tmplOpts)
 	if err != nil {
 		return "", false, nil, fmt.Errorf("error applying chat template: %w", err)
 	}
@@ -250,7 +257,7 @@ func (a *Actor) generateTurn(ctx context.Context, conversation *[]message.Messag
 			// Drop the second message (oldest non-system entry) and re-tokenize.
 			log.Println("trimming oldest message from conversation to fit context window")
 			*conversation = append((*conversation)[:1], (*conversation)[2:]...)
-			prompt, err = template.Apply(a.chatTemplate, *conversation, true)
+			prompt, err = template.ApplyWithOptions(a.chatTemplate, *conversation, true, tmplOpts)
 			if err != nil {
 				return "", false, nil, fmt.Errorf("error applying chat template after trim: %w", err)
 			}
@@ -284,7 +291,13 @@ func (a *Actor) generateTurn(ctx context.Context, conversation *[]message.Messag
 		"<|turn>user", "<|turn>model",
 		"<turn>user", "<turn>model",
 		"<turn|>",
+		// Bare turn token without role suffix — emitted by Gemma 4 fine-tunes
+		// as a turn-end marker after the last tool call.
+		"<|turn|>", "<|turn>",
 		"<|channel>thought", "<channel>thought",
+		// ChatML new-message token — stop if Qwen/ChatML model starts
+		// simulating the next conversation turn.
+		"<|im_start|>", "<|im_end|>",
 		// Stop if the model starts simulating tool results — the inline JSON
 		// tool call has already been captured and faking results would just
 		// pollute the generation with garbage tokens.
@@ -324,6 +337,15 @@ generateLoop:
 					break generateLoop
 				}
 			}
+			// Stop generation if too many tool call blocks have accumulated.
+			// Models that flood the output with identical tool calls (e.g.,
+			// dozens of consecutive "wait" commands) would otherwise consume
+			// the entire MaxTokens budget without producing any spoken text.
+			const maxToolCallBlocksPerGeneration = 8
+			if strings.Count(full, "</tool_call>") >= maxToolCallBlocksPerGeneration {
+				log.Printf("stopping generation: accumulated %d tool call blocks", maxToolCallBlocksPerGeneration)
+				break generateLoop
+			}
 		}
 
 		if _, err := llama.Decode(a.llamaCtx, llama.BatchGetOne([]llama.Token{token})); err != nil {
@@ -332,18 +354,20 @@ generateLoop:
 	}
 
 	text := strings.TrimSpace(strings.TrimLeft(strings.Join(chunks, ""), "\n"))
+	log.Printf("raw generation: %q", text)
 
 	toolCalls := message.ParseToolCalls(text)
 	if len(toolCalls) > 0 {
 		var hadText bool
-		if spokenText := message.StripMarkup(text); spokenText != "" && a.outputFunc != nil {
+		var spokenText string
+		if spokenText = message.StripMarkup(text); spokenText != "" && a.outputFunc != nil {
 			remaining := flushSentences(spokenText, a.outputFunc)
 			if remaining != "" {
 				a.outputFunc(remaining)
 			}
 			hadText = true
 		}
-		return "", hadText, toolCalls, nil
+		return spokenText, hadText, toolCalls, nil
 	}
 
 	content := message.StripMarkup(text)
@@ -358,9 +382,12 @@ generateLoop:
 }
 
 // appendToolCalls adds the assistant's tool call request to the conversation.
-func (a *Actor) appendToolCalls(conversation *[]message.Message, toolCalls []message.ToolCall) {
+// spokenText may be non-empty when the model included spoken words in the same
+// turn; it is preserved in the message so subsequent turns see the full context.
+func (a *Actor) appendToolCalls(conversation *[]message.Message, toolCalls []message.ToolCall, spokenText string) {
 	*conversation = append(*conversation, message.Tool{
 		Role:      "assistant",
+		Content:   spokenText,
 		ToolCalls: toolCalls,
 	})
 }

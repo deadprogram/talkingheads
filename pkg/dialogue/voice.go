@@ -7,8 +7,6 @@ import (
 	"github.com/hybridgroup/go-sayanything/pkg/tts"
 )
 
-var names = []string{"llama3000", "gemmai", "phineas"}
-
 type Voice struct {
 	Name string
 	t    tts.Speaker
