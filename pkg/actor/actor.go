@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"time"
@@ -202,7 +203,7 @@ func (a *Actor) Run(ctx context.Context, systemPrompt string) error {
 					// give a verbal response — tool calls alone are not enough.
 					conversation = append(conversation, message.Chat{
 						Role:    "user",
-						Content: "You used tools but said nothing. You MUST include spoken words in your response — answer the question with actual sentences, not just tool calls.",
+						Content: "You called motion tools but included no spoken words. Note: calling tool_movement with command 'speak' is a head-motion cue — it is NOT a verbal response. You MUST write your actual answer as plain text outside any function blocks. Reply now with spoken sentences.",
 					})
 					log.Printf("tool-only turn %d/%d, nudging for verbal response", consecutiveToolOnlyTurns, maxConsecutiveToolOnlyTurns)
 					needMoreInput = false
@@ -361,7 +362,7 @@ generateLoop:
 	if len(toolCalls) > 0 {
 		var hadText bool
 		var spokenText string
-		if spokenText = message.StripMarkup(text); spokenText != "" && a.outputFunc != nil {
+		if spokenText = stripActorMarkup(text); spokenText != "" && a.outputFunc != nil {
 			remaining := flushSentences(spokenText, a.outputFunc)
 			if remaining != "" {
 				a.outputFunc(remaining)
@@ -371,7 +372,7 @@ generateLoop:
 		return spokenText, hadText, toolCalls, nil
 	}
 
-	content := message.StripMarkup(text)
+	content := stripActorMarkup(text)
 	if content != "" && a.outputFunc != nil {
 		remaining := flushSentences(content, a.outputFunc)
 		if remaining != "" {
@@ -504,14 +505,22 @@ You have access to the following tools:
 
 To use a tool, include call: syntax directly in your response alongside your spoken text:
   call:funcname{key:<|"|>value<|"|>}
+For numeric values omit the quote tokens:
+  call:tool_movement{command:<|"|>look<|"|>angle:90}
 
-Example of a correct response — tool calls and spoken text in the same turn:
-  call:tool_movement{command:<|"|>speak<|"|>}
+IMPORTANT rules:
+- Only use the exact tool names and command values listed above. Do not invent commands.
+- The angle parameter for 'look' and 'slowlook' MUST be inside the braces, e.g. angle:90. Never write angle: outside the braces.
+- Do NOT write parenthetical stage directions like (character turns left) in your text. Use tool calls instead.
+
+Example of a correct response — spoken text and tool calls in the same turn:
   Hello! I'm doing wonderfully today.
+  call:tool_movement{command:<|"|>speak<|"|>}
+  I looked to the right just now.
+  call:tool_movement{command:<|"|>look<|"|>angle:45}
   call:tool_movement{command:<|"|>wait<|"|>}
 
-You MUST always include spoken text in the same response as any tool calls.
-A response containing only tool calls with no spoken text is incomplete and invalid.`, toolsJSON)
+A response with only tool calls and no spoken text is invalid.`, toolsJSON)
 	}
 	if format == message.FormatQwen {
 		return systemPrompt + fmt.Sprintf(`
@@ -524,17 +533,21 @@ When you need to use a tool, use this exact format:
 <parameter=arg1>value1</parameter>
 </function>
 
-Example of a correct response — tool calls and spoken text in the same turn:
+IMPORTANT: Your spoken words MUST appear as plain text OUTSIDE any <function=…></function> blocks.
+Tool calls are physical action cues only — they do NOT replace spoken text.
+Calling tool_movement with command "speak" is a head-motion cue, NOT a verbal response.
+You MUST still write the actual words you want to say as plain text in your response.
+
+Example of a correct response — plain text first, then motion tool calls:
+Hello! I'm doing wonderfully today.
 <function=tool_movement>
 <parameter=command>speak</parameter>
 </function>
-Hello! I'm doing wonderfully today.
 <function=tool_movement>
 <parameter=command>wait</parameter>
 </function>
 
-You MUST always include spoken text in the same response as any tool calls.
-A response containing only tool calls with no spoken text is incomplete and invalid.`, toolsJSON)
+A response with only <function=…></function> blocks and no plain text is ALWAYS wrong.`, toolsJSON)
 	}
 	return systemPrompt + fmt.Sprintf(`
 
@@ -565,6 +578,25 @@ func normalizeToolName(name string) string {
 	name = strings.ReplaceAll(name, "_", "")
 	name = strings.ReplaceAll(name, "-", "")
 	return name
+}
+
+// orphanAngleRE matches bare "angle:N" tokens that models write outside the
+// tool-call braces instead of inside them — never spoken text.
+var orphanAngleRE = regexp.MustCompile(`\bangle:\d+\b`)
+
+// stageDirectionRE matches multi-word parenthetical stage directions such as
+// "(character tilts head to the left)" that models write instead of tool calls.
+// Single-word parentheticals like "(five)" are preserved.
+var stageDirectionRE = regexp.MustCompile(`\([^)]*\s[^)]*\)`)
+
+// stripActorMarkup calls message.StripMarkup and then removes artefacts that
+// are specific to the talkingheads actor (orphaned angle parameters, stage
+// directions). This keeps the yzma library general-purpose.
+func stripActorMarkup(s string) string {
+	s = message.StripMarkup(s)
+	s = orphanAngleRE.ReplaceAllString(s, "")
+	s = stageDirectionRE.ReplaceAllString(s, "")
+	return strings.TrimSpace(s)
 }
 
 // flushSentences calls fn for each complete sentence found in buf (delimited
