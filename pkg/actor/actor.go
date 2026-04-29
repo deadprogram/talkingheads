@@ -32,6 +32,14 @@ type Config struct {
 	TopK        int32
 	MaxTokens   int
 	ContextSize uint32
+	// ModelFormat controls which tool-call grammar instructions are injected
+	// into the system prompt. Leave as message.FormatAuto (zero value) to
+	// auto-detect from the model path.
+	ModelFormat message.Format
+	// InjectTools controls whether tool definitions and usage instructions are
+	// appended to the system prompt. Defaults to true. Set to false for models
+	// that have native tool-call support baked into their chat template.
+	InjectTools bool
 }
 
 // DefaultConfig returns a Config populated with sensible defaults.
@@ -42,6 +50,7 @@ func DefaultConfig() Config {
 		TopK:        DefaultTopK,
 		MaxTokens:   DefaultMaxTokens,
 		ContextSize: DefaultContextSize,
+		InjectTools: true,
 	}
 }
 
@@ -104,8 +113,13 @@ func NewActor(modelPath string, cfg Config, commander Commander, moreFunc func(c
 	sp.TopK = cfg.TopK
 	smpl := llama.NewSampler(mdl, llama.DefaultSamplers, sp)
 
+	// Auto-detect model format from the model path when not explicitly set.
+	if cfg.ModelFormat == message.FormatAuto {
+		cfg.ModelFormat = message.DetectFormat(modelPath)
+	}
+
 	toolsMap := make(map[string]Tool)
-	toolDocs := []ToolDoc{
+	toolDocs := []message.ToolDefinition{
 		RegisterMovement(toolsMap, commander),
 	}
 
@@ -133,28 +147,61 @@ func (a *Actor) Close() {
 
 // Run starts the actor and runs the chat loop.
 func (a *Actor) Run(ctx context.Context, systemPrompt string) error {
+	sysContent := systemPrompt
+	if a.cfg.InjectTools {
+		sysContent = injectToolsIntoSystemPrompt(systemPrompt, a.toolsJSON, a.cfg.ModelFormat)
+	}
 	conversation := []message.Message{
-		message.Chat{Role: "system", Content: injectToolsIntoSystemPrompt(systemPrompt, a.toolsJSON)},
+		message.Chat{Role: "system", Content: sysContent},
 	}
 
 	needMoreInput := true
+	consecutiveToolOnlyTurns := 0
+	const maxConsecutiveToolOnlyTurns = 2
 
 	for {
 		if needMoreInput {
+			consecutiveToolOnlyTurns = 0
 			if ok := a.GetMore(&conversation); !ok {
 				return nil
 			}
 		}
 
-		content, toolCalls, err := a.generateTurn(ctx, &conversation)
+		content, hadText, toolCalls, err := a.generateTurn(ctx, &conversation)
 		if err != nil {
 			return err
 		}
 
 		if len(toolCalls) > 0 {
-			a.appendToolCalls(&conversation, toolCalls)
-			conversation = append(conversation, a.callTools(ctx, toolCalls)...)
-			needMoreInput = false
+			toolResults := a.callTools(ctx, toolCalls)
+
+			if hadText {
+				// Text was spoken alongside the tool calls — record the full
+				// exchange so subsequent turns have correct context.
+				a.appendToolCalls(&conversation, toolCalls)
+				conversation = append(conversation, toolResults...)
+				consecutiveToolOnlyTurns = 0
+				needMoreInput = true
+			} else {
+				consecutiveToolOnlyTurns++
+				a.appendToolCalls(&conversation, toolCalls)
+				conversation = append(conversation, toolResults...)
+				if consecutiveToolOnlyTurns >= maxConsecutiveToolOnlyTurns {
+					// Still no text after nudge — give up and wait for new input.
+					log.Printf("breaking tool-call loop after %d consecutive tool-only turns", consecutiveToolOnlyTurns)
+					consecutiveToolOnlyTurns = 0
+					needMoreInput = true
+				} else {
+					// Inject a user nudge so the model understands it must also
+					// give a verbal response — tool calls alone are not enough.
+					conversation = append(conversation, message.Chat{
+						Role:    "user",
+						Content: "(Please also provide a verbal response alongside your actions.)",
+					})
+					log.Printf("tool-only turn %d/%d, nudging for verbal response", consecutiveToolOnlyTurns, maxConsecutiveToolOnlyTurns)
+					needMoreInput = false
+				}
+			}
 			continue
 		}
 
@@ -174,21 +221,22 @@ func (a *Actor) GetMore(conversation *[]message.Message) bool {
 }
 
 // generateTurn applies the chat template, runs inference, and returns the text
-// content and any tool calls parsed from the response.
+// content and any tool calls parsed from the response. hadText is true when
+// spoken text was flushed to outputFunc alongside tool calls in the same turn.
 // The conversation pointer may be updated to trim old messages if the prompt
 // exceeds the model's context window.
-func (a *Actor) generateTurn(ctx context.Context, conversation *[]message.Message) (string, []message.ToolCall, error) {
+func (a *Actor) generateTurn(ctx context.Context, conversation *[]message.Message) (string, bool, []message.ToolCall, error) {
 	prompt, err := template.Apply(a.chatTemplate, *conversation, true)
 	if err != nil {
-		return "", nil, fmt.Errorf("error applying chat template: %w", err)
+		return "", false, nil, fmt.Errorf("error applying chat template: %w", err)
 	}
 
 	mem, err := llama.GetMemory(a.llamaCtx)
 	if err != nil {
-		return "", nil, fmt.Errorf("error getting memory: %w", err)
+		return "", false, nil, fmt.Errorf("error getting memory: %w", err)
 	}
 	if err := llama.MemoryClear(mem, true); err != nil {
-		return "", nil, fmt.Errorf("error clearing memory: %w", err)
+		return "", false, nil, fmt.Errorf("error clearing memory: %w", err)
 	}
 
 	llama.SamplerReset(a.sampler)
@@ -204,7 +252,7 @@ func (a *Actor) generateTurn(ctx context.Context, conversation *[]message.Messag
 			*conversation = append((*conversation)[:1], (*conversation)[2:]...)
 			prompt, err = template.Apply(a.chatTemplate, *conversation, true)
 			if err != nil {
-				return "", nil, fmt.Errorf("error applying chat template after trim: %w", err)
+				return "", false, nil, fmt.Errorf("error applying chat template after trim: %w", err)
 			}
 			tokens = llama.Tokenize(a.vocab, prompt, true, false)
 		}
@@ -220,28 +268,42 @@ func (a *Actor) generateTurn(ctx context.Context, conversation *[]message.Messag
 			end = len(tokens)
 		}
 		if _, err := llama.Decode(a.llamaCtx, llama.BatchGetOne(tokens[i:end])); err != nil {
-			return "", nil, fmt.Errorf("error decoding prompt: %w", err)
+			return "", false, nil, fmt.Errorf("error decoding prompt: %w", err)
 		}
 	}
 
 	var chunks []string
-	var sentenceBuf string
-	var inThinking bool
-	var thinkHold string
-	var inToolCall bool
-	var toolCallHold string
 	pieceBuf := make([]byte, 128)
 
-	emitSentence := func(s string) {
-		if a.outputFunc != nil {
-			a.outputFunc(s)
-		}
+	// Gemma 4 turn markers use <|turn>role format; also include the
+	// decoded form <turn>role (TokenToPiece strips | on some builds) and
+	// the closing <turn|> token so any variant halts generation.
+	// Also stop at <|channel>thought (and decoded form) since everything
+	// inside a thought channel is internal reasoning, not spoken text.
+	generationStopMarkers := []string{
+		"<|turn>user", "<|turn>model",
+		"<turn>user", "<turn>model",
+		"<turn|>",
+		"<|channel>thought", "<channel>thought",
+		// Stop if the model starts simulating tool results — the inline JSON
+		// tool call has already been captured and faking results would just
+		// pollute the generation with garbage tokens.
+		// Both bare forms and underscore forms are listed because the Gemma
+		// template may render tool results as <tool_result>…</tool_result> and
+		// the model echoes that exact form in subsequent generations.
+		"<toolresult", "<|toolresult", "<tool_result",
+		"<toolresponse", "<|toolresponse", "<tool_response",
+		// Stop if the model echoes back a tool result in bare word{...} form.
+		`tool{"status"`,
+		// Stop at Gemma 4 turn-end marker.
+		"<turnend>", "<|turnend>",
 	}
 
+generateLoop:
 	for i := 0; i < a.cfg.MaxTokens; i++ {
 		select {
 		case <-ctx.Done():
-			return "", nil, ctx.Err()
+			return "", false, nil, ctx.Err()
 		default:
 		}
 
@@ -254,11 +316,13 @@ func (a *Actor) generateTurn(ctx context.Context, conversation *[]message.Messag
 		if n > 0 {
 			piece := string(pieceBuf[:n])
 			chunks = append(chunks, piece)
-			visible := filterThinkingPiece(piece, &inThinking, &thinkHold)
-			visible = filterToolCallPiece(visible, &inToolCall, &toolCallHold)
-			if visible != "" {
-				sentenceBuf += visible
-				sentenceBuf = flushSentences(sentenceBuf, emitSentence)
+
+			full := strings.Join(chunks, "")
+			for _, marker := range generationStopMarkers {
+				if idx := strings.Index(full, marker); idx >= 0 {
+					chunks = []string{full[:idx]}
+					break generateLoop
+				}
 			}
 		}
 
@@ -267,33 +331,30 @@ func (a *Actor) generateTurn(ctx context.Context, conversation *[]message.Messag
 		}
 	}
 
-	// Flush any partial tag hold buffers that turned out not to be tags.
-	if !inThinking && thinkHold != "" {
-		sentenceBuf += thinkHold
-	}
-	if !inToolCall && toolCallHold != "" {
-		sentenceBuf += toolCallHold
-	}
-
 	text := strings.TrimSpace(strings.TrimLeft(strings.Join(chunks, ""), "\n"))
 
 	toolCalls := message.ParseToolCalls(text)
 	if len(toolCalls) > 0 {
-		// Emit any text content that accompanied the tool calls (e.g. Gemma 4
-		// <turn>model text following </toolcall>) if it wasn't already streamed.
-		if spokenText := message.StripMarkup(text); spokenText != "" {
-			if remaining := strings.TrimSpace(sentenceBuf); remaining == "" {
-				emitSentence(spokenText)
+		var hadText bool
+		if spokenText := message.StripMarkup(text); spokenText != "" && a.outputFunc != nil {
+			remaining := flushSentences(spokenText, a.outputFunc)
+			if remaining != "" {
+				a.outputFunc(remaining)
 			}
+			hadText = true
 		}
-		return "", toolCalls, nil
+		return "", hadText, toolCalls, nil
 	}
 
-	if remaining := strings.TrimSpace(sentenceBuf); remaining != "" {
-		emitSentence(remaining)
+	content := message.StripMarkup(text)
+	if content != "" && a.outputFunc != nil {
+		remaining := flushSentences(content, a.outputFunc)
+		if remaining != "" {
+			a.outputFunc(remaining)
+		}
 	}
 
-	return text, nil, nil
+	return content, false, nil, nil
 }
 
 // appendToolCalls adds the assistant's tool call request to the conversation.
@@ -393,7 +454,7 @@ func InstallSystem(modelURL string) (string, error) {
 
 // marshalToolDocs formats a slice of tool documents as a JSON array string for
 // injection into the system prompt.
-func marshalToolDocs(docs []ToolDoc) string {
+func marshalToolDocs(docs []message.ToolDefinition) string {
 	b, err := json.MarshalIndent(docs, "", "  ")
 	if err != nil {
 		return "[]"
@@ -401,11 +462,28 @@ func marshalToolDocs(docs []ToolDoc) string {
 	return string(b)
 }
 
-// injectToolsIntoSystemPrompt appends the tool definitions and usage instructions
-// to the system prompt.
-func injectToolsIntoSystemPrompt(systemPrompt, toolsJSON string) string {
+// injectToolsIntoSystemPrompt appends tool definitions and usage instructions
+// to the system prompt using the format appropriate for the model.
+func injectToolsIntoSystemPrompt(systemPrompt, toolsJSON string, format message.Format) string {
 	if toolsJSON == "" || toolsJSON == "[]" {
 		return systemPrompt
+	}
+	if format == message.FormatGemma {
+		return systemPrompt + fmt.Sprintf(`
+
+You have access to the following tools:
+%s
+
+To use a tool, include call: syntax directly in your response alongside your spoken text:
+  call:funcname{key:<|"|>value<|"|>}
+
+Example of a correct response — tool calls and spoken text in the same turn:
+  call:tool_movement{command:<|"|>speak<|"|>}
+  Hello! I'm doing wonderfully today.
+  call:tool_movement{command:<|"|>wait<|"|>}
+
+You MUST always include spoken text in the same response as any tool calls.
+A response containing only tool calls with no spoken text is incomplete and invalid.`, toolsJSON)
 	}
 	return systemPrompt + fmt.Sprintf(`
 
@@ -438,120 +516,9 @@ func normalizeToolName(name string) string {
 	return name
 }
 
-// filterThinkingPiece processes a newly arrived piece of text, filtering out
-// content inside <think>...</think> blocks. inThinking and holdBuf are
-// persistent state across calls. Returns the visible (non-thinking) content.
-func filterThinkingPiece(piece string, inThinking *bool, holdBuf *string) string {
-	combined := *holdBuf + piece
-	*holdBuf = ""
-	result := ""
-
-	for combined != "" {
-		if *inThinking {
-			idx := strings.Index(combined, "</think>")
-			if idx >= 0 {
-				*inThinking = false
-				combined = combined[idx+len("</think>"):]
-			} else {
-				// No closing tag yet; hold any partial suffix that could start one.
-				*holdBuf = longestTagPrefix(combined, "</think>")
-				combined = ""
-			}
-		} else {
-			idx := strings.Index(combined, "<think>")
-			if idx >= 0 {
-				result += combined[:idx]
-				*inThinking = true
-				combined = combined[idx+len("<think>"):]
-			} else {
-				// No opening tag; hold any partial suffix that could start one.
-				partial := longestTagPrefix(combined, "<think>")
-				result += combined[:len(combined)-len(partial)]
-				*holdBuf = partial
-				combined = ""
-			}
-		}
-	}
-	return result
-}
-
-// filterToolCallPiece processes a newly arrived piece of text, filtering out
-// <toolcall>...</toolcall> blocks (Gemma 4 format) and any <turn>ROLE markers.
-// inToolCall and holdBuf are persistent state across calls.
-// Returns the visible (non-toolcall) content.
-func filterToolCallPiece(piece string, inToolCall *bool, holdBuf *string) string {
-	if piece == "" {
-		return ""
-	}
-	combined := *holdBuf + piece
-	*holdBuf = ""
-	result := ""
-
-	// suppressiblePrefixes lists patterns that must be suppressed but have no
-	// closing tag — used for partial-suffix hold detection.
-	suppressibleMarkers := []string{
-		"<turn>model", "<turn>user", "<turn>assistant", "<turn>system",
-	}
-
-	for combined != "" {
-		if *inToolCall {
-			idx := strings.Index(combined, "</toolcall>")
-			if idx >= 0 {
-				*inToolCall = false
-				combined = combined[idx+len("</toolcall>"):]
-			} else {
-				*holdBuf = longestTagPrefix(combined, "</toolcall>")
-				combined = ""
-			}
-		} else {
-			// Find earliest of <toolcall> or any <turn>ROLE marker.
-			tcIdx := strings.Index(combined, "<toolcall>")
-
-			turnIdx, turnLen := -1, 0
-			for _, marker := range suppressibleMarkers {
-				if idx := strings.Index(combined, marker); idx >= 0 && (turnIdx < 0 || idx < turnIdx) {
-					turnIdx, turnLen = idx, len(marker)
-				}
-			}
-
-			if tcIdx >= 0 && (turnIdx < 0 || tcIdx <= turnIdx) {
-				result += combined[:tcIdx]
-				*inToolCall = true
-				combined = combined[tcIdx+len("<toolcall>"):]
-			} else if turnIdx >= 0 {
-				result += combined[:turnIdx]
-				combined = combined[turnIdx+turnLen:]
-			} else {
-				// No full pattern; hold the longest suffix that could start one.
-				allTags := append([]string{"<toolcall>"}, suppressibleMarkers...)
-				partial := ""
-				for _, tag := range allTags {
-					if p := longestTagPrefix(combined, tag); len(p) > len(partial) {
-						partial = p
-					}
-				}
-				result += combined[:len(combined)-len(partial)]
-				*holdBuf = partial
-				combined = ""
-			}
-		}
-	}
-	return result
-}
-
-// longestTagPrefix returns the longest suffix of s that is a proper prefix of tag.
-func longestTagPrefix(s, tag string) string {
-	for i := len(tag) - 1; i > 0; i-- {
-		if strings.HasSuffix(s, tag[:i]) {
-			return tag[:i]
-		}
-	}
-	return ""
-}
-
 // flushSentences calls fn for each complete sentence found in buf (delimited
 // by '.', '!' or '?' followed by whitespace or end-of-string) and returns any
-// remaining partial sentence that has not yet ended.
+// remaining partial sentence.
 func flushSentences(buf string, fn func(string)) string {
 	for {
 		idx := -1

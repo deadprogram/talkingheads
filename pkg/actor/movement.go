@@ -57,7 +57,7 @@ type Movement struct {
 
 // RegisterMovement creates a new instance of the Movement tool and loads it
 // into the provided tools map. If commander is nil, a LogCommander is used.
-func RegisterMovement(tools map[string]Tool, commander Commander) ToolDoc {
+func RegisterMovement(tools map[string]Tool, commander Commander) message.ToolDefinition {
 	if commander == nil {
 		commander = &LogCommander{}
 	}
@@ -70,20 +70,20 @@ func RegisterMovement(tools map[string]Tool, commander Commander) ToolDoc {
 	return rf.toolDocument()
 }
 
-func (rf *Movement) toolDocument() ToolDoc {
-	return ToolDoc{
-		"type": "function",
-		"function": ToolDoc{
-			"name":        rf.name,
-			"description": "Control the head movement of the actor.",
-			"parameters": ToolDoc{
+func (rf *Movement) toolDocument() message.ToolDefinition {
+	return message.ToolDefinition{
+		Type: "function",
+		Function: message.ToolFunctionDefinition{
+			Name:        rf.name,
+			Description: "Control the head movement of the actor.",
+			Parameters: map[string]interface{}{
 				"type": "object",
-				"properties": ToolDoc{
-					"command": ToolDoc{
+				"properties": map[string]interface{}{
+					"command": map[string]interface{}{
 						"type":        "string",
 						"description": "The movement command to perform. Valid values are: 'look' (turn to angle), 'slowlook' (slowly turn to angle), 'headshake' (shake head to indicate no), 'wait' (idle movement), 'speak' (movement while speaking), 'stop' (stop and center).",
 					},
-					"angle": ToolDoc{
+					"angle": map[string]interface{}{
 						"type":        "integer",
 						"description": "The angle in degrees (0-180) to look at. Required for 'look' and 'slowlook' commands. 90 is center, 0 is full right, 180 is full left.",
 						"minimum":     0,

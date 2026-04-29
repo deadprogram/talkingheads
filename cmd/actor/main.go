@@ -83,6 +83,11 @@ func main() {
 				Usage: "KV cache / context window size in tokens",
 				Value: int(actor.DefaultContextSize),
 			},
+			&cli.BoolFlag{
+				Name:  "inject-tools",
+				Usage: "enable injecting tool definitions into the system prompt (useful for models with native tool-call support)",
+				Value: true,
+			},
 		},
 		Action: run,
 	}
@@ -179,6 +184,7 @@ func run(c *cli.Context) error {
 		TopK:        int32(c.Int("top-k")),
 		MaxTokens:   c.Int("max-tokens"),
 		ContextSize: uint32(c.Int("context-size")),
+		InjectTools: c.Bool("inject-tools"),
 	}, commander, moreFunc, outputFunc)
 	if err != nil {
 		return cli.Exit(fmt.Sprintf("failed to create actor: %v", err), 1)

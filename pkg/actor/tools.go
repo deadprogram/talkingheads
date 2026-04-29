@@ -7,9 +7,6 @@ import (
 	"github.com/hybridgroup/yzma/pkg/message"
 )
 
-// ToolDoc is a JSON-serialisable tool definition injected into the system prompt.
-type ToolDoc = map[string]any
-
 // Tool describes the features which all tools must implement.
 type Tool interface {
 	Call(ctx context.Context, toolCall message.ToolCall) string

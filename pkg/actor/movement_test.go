@@ -21,28 +21,20 @@ func TestRegisterMovement_DocumentStructure(t *testing.T) {
 	tools := make(map[string]Tool)
 	doc := RegisterMovement(tools, nil)
 
-	if doc["type"] != "function" {
-		t.Errorf("type: got %v, want %q", doc["type"], "function")
+	if doc.Type != "function" {
+		t.Errorf("type: got %v, want %q", doc.Type, "function")
 	}
-
-	fn, ok := doc["function"].(ToolDoc)
-	if !ok {
-		t.Fatal("function field is not ToolDoc")
+	if doc.Function.Name != "tool_movement" {
+		t.Errorf("function name: got %v, want %q", doc.Function.Name, "tool_movement")
 	}
-	if fn["name"] != "tool_movement" {
-		t.Errorf("function name: got %v, want %q", fn["name"], "tool_movement")
-	}
-	if fn["description"] == "" {
+	if doc.Function.Description == "" {
 		t.Error("function description should not be empty")
 	}
 
-	params, ok := fn["parameters"].(ToolDoc)
+	params := doc.Function.Parameters
+	props, ok := params["properties"].(map[string]interface{})
 	if !ok {
-		t.Fatal("parameters field is not ToolDoc")
-	}
-	props, ok := params["properties"].(ToolDoc)
-	if !ok {
-		t.Fatal("properties field is not ToolDoc")
+		t.Fatal("properties field is not map[string]interface{}")
 	}
 	if _, ok := props["command"]; !ok {
 		t.Error("expected 'command' property in tool document")
