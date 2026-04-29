@@ -121,7 +121,7 @@ func NewActor(modelPath string, cfg Config, commander Commander, moreFunc func(c
 
 	// Auto-detect model format from the model path when not explicitly set.
 	if cfg.ModelFormat == message.FormatAuto {
-		cfg.ModelFormat = message.DetectFormat(modelPath)
+		cfg.ModelFormat = message.DetectFormatFromPath(modelPath)
 	}
 
 	toolsMap := make(map[string]Tool)
@@ -342,8 +342,9 @@ generateLoop:
 			// dozens of consecutive "wait" commands) would otherwise consume
 			// the entire MaxTokens budget without producing any spoken text.
 			const maxToolCallBlocksPerGeneration = 8
-			if strings.Count(full, "</tool_call>") >= maxToolCallBlocksPerGeneration {
-				log.Printf("stopping generation: accumulated %d tool call blocks", maxToolCallBlocksPerGeneration)
+			toolCallCount := strings.Count(full, "</tool_call>") + strings.Count(full, "</function>")
+			if toolCallCount >= maxToolCallBlocksPerGeneration {
+				log.Printf("stopping generation: accumulated %d tool call blocks", toolCallCount)
 				break generateLoop
 			}
 		}
@@ -508,6 +509,29 @@ Example of a correct response — tool calls and spoken text in the same turn:
   call:tool_movement{command:<|"|>speak<|"|>}
   Hello! I'm doing wonderfully today.
   call:tool_movement{command:<|"|>wait<|"|>}
+
+You MUST always include spoken text in the same response as any tool calls.
+A response containing only tool calls with no spoken text is incomplete and invalid.`, toolsJSON)
+	}
+	if format == message.FormatQwen {
+		return systemPrompt + fmt.Sprintf(`
+
+You have access to the following tools:
+%s
+
+When you need to use a tool, use this exact format:
+<function=function_name>
+<parameter=arg1>value1</parameter>
+</function>
+
+Example of a correct response — tool calls and spoken text in the same turn:
+<function=tool_movement>
+<parameter=command>speak</parameter>
+</function>
+Hello! I'm doing wonderfully today.
+<function=tool_movement>
+<parameter=command>wait</parameter>
+</function>
 
 You MUST always include spoken text in the same response as any tool calls.
 A response containing only tool calls with no spoken text is incomplete and invalid.`, toolsJSON)
