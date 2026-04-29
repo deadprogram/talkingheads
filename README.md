@@ -34,7 +34,7 @@ speak-- subscribe -->dialogue
 
 ### Actor
 
-Actor runs on the Linux part of an Arduino UNO Q board. It is written in Go with [Kronk](https://github.com/ardanlabs/kronk) and [yzma](https://github.com/hybridgroup/yzma) to perform local inference using [llama.cpp](https://github.com/ggml-org/llama.cpp). It communicates with other Actors by publishing and subscribing to [MQTT](https://mqtt.org/) messages.
+Actor runs on the Linux part of an Arduino UNO Q board. It is written in Go with [yzma](https://github.com/hybridgroup/yzma) to perform local inference using [llama.cpp](https://github.com/ggml-org/llama.cpp). It communicates with other Actors by publishing and subscribing to [MQTT](https://mqtt.org/) messages.
 
 ```mermaid
 flowchart LR
@@ -42,21 +42,20 @@ subgraph mqtt broker
     ask
     speak
 end
-subgraph actor
-    subgraph kronk
-        process<-->yzma
+subgraph Actor
+    subgraph actor
+        run
     end
     subgraph tools
-        process<-->actions
-        actions
+        run<-->movement
     end
     subgraph yzma
-        llama.cpp
+        run<-->llama.cpp
         llama.cpp-->model
     end
-    ask-- subscribe -->process
-    process-- publish -->speak
-    speak-- subscribe -->process
+    ask-- subscribe -->run
+    run-- publish -->speak
+    speak-- subscribe -->run
 end
 subgraph The Head
     actions<-- UART -->lights
@@ -133,25 +132,25 @@ subgraph mqtt broker
     ask
     speak
 end
-subgraph actor
-    subgraph kronk
-        process<-->yzma
-    end
-    subgraph tools
-        process<-->actions
-        actions
-    end
-    subgraph yzma
-        llama.cpp
-        llama.cpp-->model
-    end
-    ask-- subscribe -->process
-    process-- publish -->speak
-    speak-- subscribe -->process
-end
 subgraph The Head
     actions<-- UART -->lights
     actions<-- UART -->action
+end
+subgraph Actor
+    subgraph actor
+        run
+    end
+    subgraph tools
+        run<-->movement
+        movement-->actions
+    end
+    subgraph yzma
+        run<-->llama.cpp
+        llama.cpp-->model
+    end
+    ask-- subscribe -->run
+    run-- publish -->speak
+    speak-- subscribe -->run
 end
 subgraph dialogue
     speak-- subscribe -->sayanything
