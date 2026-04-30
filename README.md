@@ -63,8 +63,7 @@ subgraph Actor
     speaking-- subscribe -->run
 end
 subgraph The Head
-    actions<-- UART -->lights
-    actions<-- UART -->action
+    movement<-- UART -->actions
 end
 ```
 
@@ -135,14 +134,14 @@ end
 
 ```mermaid
 flowchart LR
+subgraph The Head
+    actions<-- UART -->lights
+    actions<-- UART -->action
+end
 subgraph mqtt broker
     ask
     speak
     speaking
-end
-subgraph The Head
-    actions<-- UART -->lights
-    actions<-- UART -->action
 end
 subgraph Actor
     subgraph actor
@@ -150,7 +149,7 @@ subgraph Actor
     end
     subgraph tools
         run<-->movement
-        movement-->actions
+        movement-- UART -->actions
     end
     subgraph yzma
         run<-->llama.cpp
