@@ -7,7 +7,7 @@ require (
 	github.com/ggerganov/whisper.cpp/bindings/go v0.0.0-20260420051257-fc674574ca27
 	github.com/gordonklaus/portaudio v0.0.0-20260203164431-765aa7dfa631
 	github.com/hybridgroup/go-sayanything v0.0.0-20240612142303-20a80305bf1e
-	github.com/hybridgroup/yzma v1.13.0
+	github.com/hybridgroup/yzma v1.13.1-0.20260430184946-fcf5c5d071b2
 	go.bug.st/serial v1.6.4
 	golang.org/x/term v0.42.0
 )
@@ -104,5 +104,3 @@ require (
 )
 
 replace github.com/ggerganov/whisper.cpp/bindings/go => ./lib/whisper.cpp/bindings/go
-
-replace github.com/hybridgroup/yzma => /home/ron/Development/yzma

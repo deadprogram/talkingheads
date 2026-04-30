@@ -135,6 +135,8 @@ github.com/hashicorp/go-version v1.9.0 h1:CeOIz6k+LoN3qX9Z0tyQrPtiB1DFYRPfCIBtaX
 github.com/hashicorp/go-version v1.9.0/go.mod h1:fltr4n8CU8Ke44wwGCBoEymUuxUHl09ZGVZPK5anwXA=
 github.com/hybridgroup/go-sayanything v0.0.0-20240612142303-20a80305bf1e h1:lujxuRY9KkRUXC+HR6hZqPfvqS/OgRksCBvGIG7+M3s=
 github.com/hybridgroup/go-sayanything v0.0.0-20240612142303-20a80305bf1e/go.mod h1:wk47RN9v1Rvox4UsFRG/OzsKkKi+yveqetH+KUyaJxI=
+github.com/hybridgroup/yzma v1.13.1-0.20260430184946-fcf5c5d071b2 h1:kEiYgFlBu4wJkk5kX6DkeNAEHtGI/7VYNRAzc+QAntE=
+github.com/hybridgroup/yzma v1.13.1-0.20260430184946-fcf5c5d071b2/go.mod h1:DAsHYcX7ze7iFZH6PT57oCuqaVd/AXdALhjnOSgWbaE=
 github.com/jupiterrider/ffi v0.6.0 h1:UX378KcZvH5c8qgLi9KL/bL82SZTHdRspZ+jj7bvBng=
 github.com/jupiterrider/ffi v0.6.0/go.mod h1:PqZ5Go6X9by8CIXgfprxfMPYmn8oT5m2O7AA56s64bY=
 github.com/klauspost/compress v1.18.5 h1:/h1gH5Ce+VWNLSWqPzOVn6XBO+vJbCNGvjoaGBFW2IE=

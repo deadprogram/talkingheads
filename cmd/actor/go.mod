@@ -4,11 +4,9 @@ go 1.26.0
 
 replace github.com/deadprogram/talkingheads => ../..
 
-replace github.com/hybridgroup/yzma => /home/ron/Development/yzma
-
 require (
 	github.com/deadprogram/talkingheads v0.0.0-00010101000000-000000000000
-	github.com/hybridgroup/yzma v1.13.0
+	github.com/hybridgroup/yzma v1.13.1-0.20260430184946-fcf5c5d071b2
 	github.com/urfave/cli/v2 v2.27.7
 )
 
