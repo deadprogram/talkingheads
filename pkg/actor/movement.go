@@ -81,7 +81,7 @@ func (rf *Movement) toolDocument() message.ToolDefinition {
 				"properties": map[string]interface{}{
 					"command": map[string]interface{}{
 						"type":        "string",
-						"description": "The movement command to perform. Valid values are: 'look' (turn to angle), 'slowlook' (slowly turn to angle), 'headshake' (shake head to indicate no), 'wait' (idle movement), 'speak' (movement while speaking), 'stop' (stop and center).",
+						"description": "The movement command to perform. Valid values are: 'look' (turn to angle), 'slowlook' (slowly turn to angle), 'headshake' (shake head to indicate no).",
 					},
 					"angle": map[string]interface{}{
 						"type":        "integer",
@@ -124,7 +124,7 @@ func (rf *Movement) Call(ctx context.Context, toolCall message.ToolCall) (resp s
 		}
 		serialCmd = fmt.Sprintf("%s %d", command, angleInt)
 		successArgs = []any{"command", command, "angle", angleInt}
-	case "headshake", "wait", "speak", "stop":
+	case "headshake":
 		serialCmd = command
 		successArgs = []any{"command", command}
 	default:

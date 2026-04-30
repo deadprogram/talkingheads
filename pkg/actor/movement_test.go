@@ -93,42 +93,6 @@ func TestMovementCall_HeadShake(t *testing.T) {
 	}
 }
 
-func TestMovementCall_Wait(t *testing.T) {
-	tools := make(map[string]Tool)
-	RegisterMovement(tools, nil)
-
-	resp := tools["tool_movement"].Call(context.Background(),
-		makeToolCall("tool_movement", map[string]string{"command": "wait"}))
-
-	if !strings.Contains(resp, "SUCCESS") {
-		t.Errorf("expected SUCCESS in response, got: %s", resp)
-	}
-}
-
-func TestMovementCall_Speak(t *testing.T) {
-	tools := make(map[string]Tool)
-	RegisterMovement(tools, nil)
-
-	resp := tools["tool_movement"].Call(context.Background(),
-		makeToolCall("tool_movement", map[string]string{"command": "speak"}))
-
-	if !strings.Contains(resp, "SUCCESS") {
-		t.Errorf("expected SUCCESS in response, got: %s", resp)
-	}
-}
-
-func TestMovementCall_Stop(t *testing.T) {
-	tools := make(map[string]Tool)
-	RegisterMovement(tools, nil)
-
-	resp := tools["tool_movement"].Call(context.Background(),
-		makeToolCall("tool_movement", map[string]string{"command": "stop"}))
-
-	if !strings.Contains(resp, "SUCCESS") {
-		t.Errorf("expected SUCCESS in response, got: %s", resp)
-	}
-}
-
 func TestMovementCall_MissingCommand(t *testing.T) {
 	tools := make(map[string]Tool)
 	RegisterMovement(tools, nil)

@@ -11,6 +11,16 @@ Sends questions to panelists over MQTT. Questions can be typed at the keyboard o
 | `--hotmic-lang` | no | `auto` | BCP-47 language code for transcription (e.g. `en`), or `auto` for automatic detection |
 | `--hotmic-key` | no | ` ` (space) | Keyboard character that toggles recording on/off |
 
+## MQTT message format
+
+Questions are published to `ask/<name>` as JSON:
+
+```json
+{"who": "llama3000", "what": "What is the meaning of life?"}
+```
+
+The `who` field is the panelist name (lower-cased from the prefix). Payload types are defined in `pkg/commands`.
+
 ## Keyboard mode (default)
 
 When `--hotmic-model` is not set, questions are read from stdin. Each line must be prefixed with a panelist name followed by a colon or comma:

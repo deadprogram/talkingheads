@@ -43,8 +43,10 @@ Pre-built scripts live in the `scripts/` directory at the repo root:
 **Interactive (default)** — reads input from stdin, prints responses to stdout.
 
 **MQTT** — set `--server` to connect to an MQTT broker. The actor subscribes to
-`ask/<name>` for direct prompts and `speak/#` to hear other actors, and publishes
-its responses to `speak/<name>`.
+`ask/<name>` for direct prompts, `speak/#` to hear other actors, and
+`speaking/<name>` to receive playback notifications from Dialogue. It publishes
+its responses to `speak/<name>`. Payloads use the JSON formats defined in
+`pkg/commands`.
 
 **Serial** — set `--serial` to send head movement commands to a microcontroller
 running the action firmware. If omitted, commands are logged to the console instead.

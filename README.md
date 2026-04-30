@@ -13,6 +13,7 @@ flowchart LR
 subgraph mqtt broker
     ask
     speak
+    speaking
 end
 subgraph actors
     actor-1
@@ -30,6 +31,8 @@ ask-- subscribe -->actors
 actors-- publish -->speak
 speak-- subscribe -->actors
 speak-- subscribe -->dialogue
+dialogue-- publish -->speaking
+speaking-- subscribe -->actors
 ```
 
 ### Actor
@@ -41,6 +44,7 @@ flowchart LR
 subgraph mqtt broker
     ask
     speak
+    speaking
 end
 subgraph Actor
     subgraph actor
@@ -56,6 +60,7 @@ subgraph Actor
     ask-- subscribe -->run
     run-- publish -->speak
     speak-- subscribe -->run
+    speaking-- subscribe -->run
 end
 subgraph The Head
     actions<-- UART -->lights
@@ -112,6 +117,7 @@ Dialogue runs on a separate computer that is connected to the same local network
 flowchart LR
 subgraph mqtt broker
     speak
+    speaking
 end
 subgraph dialogue
     speak-- subscribe -->sayanything
@@ -121,6 +127,7 @@ subgraph dialogue
     subgraph portaudio
         tts-- WAV -->speaker
     end
+    sayanything-- publish -->speaking
 end
 ```
 
@@ -131,6 +138,7 @@ flowchart LR
 subgraph mqtt broker
     ask
     speak
+    speaking
 end
 subgraph The Head
     actions<-- UART -->lights
@@ -151,6 +159,7 @@ subgraph Actor
     ask-- subscribe -->run
     run-- publish -->speak
     speak-- subscribe -->run
+    speaking-- subscribe -->run
 end
 subgraph dialogue
     speak-- subscribe -->sayanything
@@ -160,6 +169,7 @@ subgraph dialogue
     subgraph portaudio
         tts-- WAV -->speaker
     end
+    sayanything-- publish -->speaking
 end
 subgraph director
     hotmic
@@ -182,7 +192,7 @@ docker run -d --network host eclipse-mosquitto
 
 ## Piper TTS Engine
 
-https://github.com/rhasspy/piper
+https://github.com/OHF-Voice/piper1-gpl
 
 - download binary
 - add to path

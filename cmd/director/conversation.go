@@ -1,8 +1,10 @@
 package main
 
 import (
+	"encoding/json"
 	"log"
 
+	"github.com/deadprogram/talkingheads/pkg/commands"
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 )
 
@@ -42,7 +44,13 @@ func (c *conversation) processQuestions() error {
 	for question := range c.questions {
 		topic := "ask/" + question.To
 
-		token := c.client.Publish(topic, 0, false, []byte(question.Content))
+		payload, err := json.Marshal(commands.Ask{Who: question.To, What: question.Content})
+		if err != nil {
+			log.Printf("failed marshalling ask message: %v", err)
+			continue
+		}
+
+		token := c.client.Publish(topic, 0, false, payload)
 		if token.Wait() && token.Error() != nil {
 			log.Fatal("failed publishing to MQTT topic: ", token.Error())
 			return token.Error()

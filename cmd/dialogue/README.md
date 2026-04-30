@@ -48,6 +48,20 @@ Messages must be published to `speak/<name>` as JSON:
 
 The `who` field is matched against the registered voice names. Messages for unknown speakers are silently dropped.
 
+When playback starts, Dialogue publishes to `speaking/<name>`:
+
+```json
+{"who": "llama3000", "status": "speaking"}
+```
+
+When playback finishes it publishes:
+
+```json
+{"who": "llama3000", "status": "stopped"}
+```
+
+All payload types are defined in `pkg/commands`.
+
 ## Voice models
 
 Voice model files (`.onnx` + `.onnx.json`) should be placed in the `./voices` directory (or the path passed to `--data`).

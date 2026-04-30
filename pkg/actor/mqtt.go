@@ -2,10 +2,12 @@ package actor
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"regexp"
 	"sync"
 
+	"github.com/deadprogram/talkingheads/pkg/commands"
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/hybridgroup/yzma/pkg/message"
 )
@@ -61,20 +63,43 @@ func NewMQTTListener(name, server string) (*MQTTListener, error) {
 	}
 	log.Printf("Subscribed to speak/#\n")
 
+	speakingTopic := "speaking/" + name
+	token = client.Subscribe(speakingTopic, 0, l.handleSpeakingStatus)
+	if token.Wait() && token.Error() != nil {
+		client.Disconnect(250)
+		return nil, token.Error()
+	}
+	log.Printf("Subscribed to %s\n", speakingTopic)
+
 	return l, nil
 }
 
 func (l *MQTTListener) handleAsk(_ mqtt.Client, msg mqtt.Message) {
-	text := string(msg.Payload())
-	log.Printf("Received ask message: %s\n", text)
-	l.enqueue(text)
+	var a commands.Ask
+	if err := json.Unmarshal(msg.Payload(), &a); err != nil {
+		log.Printf("Failed to unmarshal ask message: %v\n", err)
+		return
+	}
+	log.Printf("Received ask message from %s: %s\n", a.Who, a.What)
+	l.enqueue(a.What)
+}
+
+func (l *MQTTListener) handleSpeakingStatus(_ mqtt.Client, msg mqtt.Message) {
+	var s commands.Speaking
+	if err := json.Unmarshal(msg.Payload(), &s); err != nil {
+		log.Printf("Failed to unmarshal speaking message: %v\n", err)
+		return
+	}
+	switch s.Status {
+	case commands.StatusSpeaking:
+		fmt.Println("now speaking")
+	case commands.StatusStopped:
+		fmt.Println("stopped speaking")
+	}
 }
 
 func (l *MQTTListener) handleSpeak(_ mqtt.Client, msg mqtt.Message) {
-	var s struct {
-		Who  string `json:"who"`
-		What string `json:"what"`
-	}
+	var s commands.Speak
 	if err := json.Unmarshal(msg.Payload(), &s); err != nil {
 		log.Printf("Failed to unmarshal speak message: %v\n", err)
 		return
@@ -138,10 +163,7 @@ func (l *MQTTListener) OutputFunc() func(string) {
 		if len(content) == 0 {
 			return
 		}
-		payload, err := json.Marshal(struct {
-			Who  string `json:"who"`
-			What string `json:"what"`
-		}{Who: l.name, What: content})
+		payload, err := json.Marshal(commands.Speak{Who: l.name, What: content})
 		if err != nil {
 			log.Printf("failed to marshal response: %v\n", err)
 			return

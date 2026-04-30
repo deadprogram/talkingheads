@@ -32,21 +32,17 @@ listener, err := dialogue.NewListener(clientID, brokerURL, voices)
 listener.Listen() // blocks
 ```
 
-`Listen` blocks, consuming messages from the internal channel. Each incoming message is decoded as `SomethingSaid` and dispatched to the voice whose `Name` matches the `who` field.
+`Listen` blocks, consuming messages from the internal channel. For each incoming message it:
 
-### `SomethingSaid`
+1. Publishes `speaking/<who>` with `status: "speaking"` to notify Actors that playback is starting.
+2. Calls `SayOnce` (blocking) to synthesise and play the audio.
+3. Publishes `speaking/<who>` with `status: "stopped"` when playback completes.
 
-The JSON payload expected on `speak/#` topics:
-
-```go
-type SomethingSaid struct {
-    Who  string `json:"who"`
-    What string `json:"what"`
-}
-```
+Messages use the `commands.Speak` type from `pkg/commands` (`{"who": "…", "what": "…"}`). Messages for unknown speakers are logged and dropped.
 
 ## MQTT topics
 
 | Topic | Direction | Description |
 |---|---|---|
 | `speak/#` | subscribe | Messages to be spoken; routed by `who` field |
+| `speaking/<who>` | publish | Notifies Actors when speaking starts (`"speaking"`) and stops (`"stopped"`) |

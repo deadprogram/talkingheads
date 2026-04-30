@@ -61,3 +61,23 @@ stop\r
 ```
 
 This matches the serial API implemented by the `action` firmware in `action/`.
+
+## MQTT topics
+
+All payloads use the JSON types from `pkg/commands`.
+
+| Topic | Direction | Description |
+|---|---|---|
+| `ask/<name>` | subscribe | Direct question from the Director |
+| `speak/#` | subscribe | Hear what other Actors say |
+| `speaking/<name>` | subscribe | Notifications from Dialogue when this Actor's voice starts or stops playing |
+| `speak/<name>` | publish | Publish the Actor's response |
+
+### Speaking status
+
+When Dialogue begins playing audio for this Actor it publishes a `speaking/<name>` message with `status: "speaking"`. When playback finishes it publishes `status: "stopped"`. The Actor logs these to the console:
+
+```
+now speaking
+stopped speaking
+```

@@ -5,18 +5,14 @@ import (
 	"errors"
 	"log"
 
+	"github.com/deadprogram/talkingheads/pkg/commands"
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 )
 
-// SomethingSaid represents a message that was said, including who said it and what they said.
-type SomethingSaid struct {
-	Who  string `json:"who"`
-	What string `json:"what"`
-}
-
 // Listener listens for MQTT messages with something that was said, and then tells the appropriate Voice to say it.
 type Listener struct {
-	whatWasSaid chan SomethingSaid
+	client      mqtt.Client
+	whatWasSaid chan commands.Speak
 	voices      map[string]*Voice
 }
 
@@ -41,7 +37,8 @@ func NewListener(name, server string, voices map[string]*Voice) (*Listener, erro
 	}
 
 	m := &Listener{
-		whatWasSaid: make(chan SomethingSaid, 5),
+		client:      client,
+		whatWasSaid: make(chan commands.Speak, 5),
 		voices:      voices,
 	}
 
@@ -60,7 +57,7 @@ func (m *Listener) handleSpeaking(client mqtt.Client, msg mqtt.Message) {
 	log.Printf("Received message: %s\n", string(msg.Payload()))
 
 	// parse the payload and extract the text to speak
-	var s SomethingSaid
+	var s commands.Speak
 	if err := json.Unmarshal(msg.Payload(), &s); err != nil {
 		log.Printf("Failed to unmarshal message: %v\n", err)
 		return
@@ -69,14 +66,47 @@ func (m *Listener) handleSpeaking(client mqtt.Client, msg mqtt.Message) {
 }
 
 // Listen listens for messages on the whatWasSaid channel and tells the appropriate Voice to say it.
+// Audio playback is serialized through a single worker goroutine so that the underlying
+// audio library context is never called concurrently.
 func (m *Listener) Listen() {
+	type playRequest struct {
+		voice *Voice
+		who   string
+		what  string
+	}
+	queue := make(chan playRequest, 10)
+
+	// Single worker: plays speech requests one at a time.
+	go func() {
+		for req := range queue {
+			m.publishSpeaking(req.who, commands.StatusSpeaking)
+			req.voice.SayOnce(req.what)
+			m.publishSpeaking(req.who, commands.StatusStopped)
+		}
+	}()
+
 	for s := range m.whatWasSaid {
 		log.Printf("Received something said: %s\n", s.What)
 		if voice, ok := m.voices[s.Who]; ok {
-			voice.SayAnything(s.What)
+			queue <- playRequest{voice: voice, who: s.Who, what: s.What}
 		} else {
 			log.Printf("No voice found for %s\n", s.Who)
 		}
+	}
+	close(queue)
+}
+
+func (m *Listener) publishSpeaking(who, status string) {
+	payload, err := json.Marshal(commands.Speaking{Who: who, Status: status})
+	if err != nil {
+		log.Printf("Failed to marshal speaking message: %v\n", err)
+		return
+	}
+	topic := "speaking/" + who
+	token := m.client.Publish(topic, 0, false, payload)
+	token.Wait()
+	if token.Error() != nil {
+		log.Printf("Failed to publish speaking message to %s: %v\n", topic, token.Error())
 	}
 }
 
