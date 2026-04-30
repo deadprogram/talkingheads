@@ -2,15 +2,28 @@ package dialogue
 
 import (
 	"log"
+	"sync"
 
 	"github.com/hybridgroup/go-sayanything/pkg/say"
 	"github.com/hybridgroup/go-sayanything/pkg/tts"
 )
 
+var (
+	sharedPlayer     *say.Player
+	sharedPlayerOnce sync.Once
+)
+
+func getSharedPlayer() *say.Player {
+	sharedPlayerOnce.Do(func() {
+		sharedPlayer = say.NewPlayer("wav")
+	})
+	return sharedPlayer
+}
+
 type Voice struct {
 	Name string
 	t    tts.Speaker
-	p    say.Player
+	p    *say.Player
 }
 
 func NewVoice(name, lang, voice, dataDir string, gpu bool) (*Voice, error) {
@@ -23,9 +36,7 @@ func NewVoice(name, lang, voice, dataDir string, gpu bool) (*Voice, error) {
 		t.UseGPU(true)
 	}
 
-	p := say.NewPlayer("wav")
-
-	return &Voice{Name: name, t: t, p: *p}, nil
+	return &Voice{Name: name, t: t, p: getSharedPlayer()}, nil
 }
 
 var speaking = 0
