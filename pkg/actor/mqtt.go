@@ -80,7 +80,7 @@ func (l *MQTTListener) handleAsk(_ mqtt.Client, msg mqtt.Message) {
 		log.Printf("Failed to unmarshal ask message: %v\n", err)
 		return
 	}
-	log.Printf("Received ask message from %s: %s\n", a.Who, a.What)
+	log.Printf("Received ask message from Director: %s\n", a.What)
 	l.enqueue(a.What)
 }
 

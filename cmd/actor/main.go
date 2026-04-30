@@ -93,6 +93,26 @@ func main() {
 				Usage: "enable thinking/reasoning mode for models that support it (e.g. Qwen3); disable to suppress chain-of-thought output",
 				Value: false,
 			},
+			&cli.Float64Flag{
+				Name:  "repeat-penalty",
+				Usage: "penalise recently-seen tokens to reduce repetition (1.0 = disabled; try 1.1–1.3 for verbose models)",
+				Value: float64(actor.DefaultRepeatPenalty),
+			},
+			&cli.Float64Flag{
+				Name:  "freq-penalty",
+				Usage: "penalise tokens proportional to how often they have appeared (0.0 = disabled)",
+				Value: float64(actor.DefaultFreqPenalty),
+			},
+			&cli.Float64Flag{
+				Name:  "presence-penalty",
+				Usage: "penalise any token that has appeared at all (0.0 = disabled)",
+				Value: float64(actor.DefaultPresencePenalty),
+			},
+			&cli.Float64Flag{
+				Name:  "dry-multiplier",
+				Usage: "DRY repetition penalty multiplier (0.0 = disabled; try 0.8 to curb looping)",
+				Value: float64(actor.DefaultDryMultiplier),
+			},
 		},
 		Action: run,
 	}
@@ -184,13 +204,17 @@ func run(c *cli.Context) error {
 	}
 
 	a, err := actor.NewActor(modelPath, actor.Config{
-		Temperature:    float32(c.Float64("temperature")),
-		TopP:           float32(c.Float64("top-p")),
-		TopK:           int32(c.Int("top-k")),
-		MaxTokens:      c.Int("max-tokens"),
-		ContextSize:    uint32(c.Int("context-size")),
-		InjectTools:    c.Bool("inject-tools"),
-		EnableThinking: c.Bool("enable-thinking"),
+		Temperature:     float32(c.Float64("temperature")),
+		TopP:            float32(c.Float64("top-p")),
+		TopK:            int32(c.Int("top-k")),
+		MaxTokens:       c.Int("max-tokens"),
+		ContextSize:     uint32(c.Int("context-size")),
+		InjectTools:     c.Bool("inject-tools"),
+		EnableThinking:  c.Bool("enable-thinking"),
+		RepeatPenalty:   float32(c.Float64("repeat-penalty")),
+		FreqPenalty:     float32(c.Float64("freq-penalty")),
+		PresencePenalty: float32(c.Float64("presence-penalty")),
+		DryMultiplier:   float32(c.Float64("dry-multiplier")),
 	}, commander, moreFunc, outputFunc)
 	if err != nil {
 		return cli.Exit(fmt.Sprintf("failed to create actor: %v", err), 1)

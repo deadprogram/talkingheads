@@ -19,11 +19,15 @@ import (
 )
 
 const (
-	DefaultTemperature = float32(0.6)
-	DefaultTopP        = float32(0.95)
-	DefaultTopK        = int32(20)
-	DefaultMaxTokens   = 2048
-	DefaultContextSize = 4096
+	DefaultTemperature     = float32(0.6)
+	DefaultTopP            = float32(0.95)
+	DefaultTopK            = int32(20)
+	DefaultMaxTokens       = 2048
+	DefaultContextSize     = 4096
+	DefaultRepeatPenalty   = float32(1.0) // 1.0 = disabled
+	DefaultFreqPenalty     = float32(0.0) // 0.0 = disabled
+	DefaultPresencePenalty = float32(0.0) // 0.0 = disabled
+	DefaultDryMultiplier   = float32(0.0) // 0.0 = disabled
 )
 
 // Config holds the tunable parameters for an Actor.
@@ -33,6 +37,18 @@ type Config struct {
 	TopK        int32
 	MaxTokens   int
 	ContextSize uint32
+	// RepeatPenalty penalises recently-seen tokens to reduce repetition.
+	// 1.0 = disabled; values around 1.1–1.3 are effective for verbose models.
+	RepeatPenalty float32
+	// FreqPenalty penalises tokens proportional to how often they have appeared.
+	// 0.0 = disabled.
+	FreqPenalty float32
+	// PresencePenalty penalises any token that has appeared at all.
+	// 0.0 = disabled.
+	PresencePenalty float32
+	// DryMultiplier enables DRY (Don't Repeat Yourself) repetition penalty.
+	// 0.0 = disabled; values around 0.8 are a good starting point.
+	DryMultiplier float32
 	// ModelFormat controls which tool-call grammar instructions are injected
 	// into the system prompt. Leave as message.FormatAuto (zero value) to
 	// auto-detect from the model path.
@@ -51,13 +67,17 @@ type Config struct {
 // DefaultConfig returns a Config populated with sensible defaults.
 func DefaultConfig() Config {
 	return Config{
-		Temperature:    DefaultTemperature,
-		TopP:           DefaultTopP,
-		TopK:           DefaultTopK,
-		MaxTokens:      DefaultMaxTokens,
-		ContextSize:    DefaultContextSize,
-		InjectTools:    true,
-		EnableThinking: false,
+		Temperature:     DefaultTemperature,
+		TopP:            DefaultTopP,
+		TopK:            DefaultTopK,
+		MaxTokens:       DefaultMaxTokens,
+		ContextSize:     DefaultContextSize,
+		RepeatPenalty:   DefaultRepeatPenalty,
+		FreqPenalty:     DefaultFreqPenalty,
+		PresencePenalty: DefaultPresencePenalty,
+		DryMultiplier:   DefaultDryMultiplier,
+		InjectTools:     true,
+		EnableThinking:  false,
 	}
 }
 
@@ -118,6 +138,10 @@ func NewActor(modelPath string, cfg Config, commander Commander, moreFunc func(c
 	sp.Temp = cfg.Temperature
 	sp.TopP = cfg.TopP
 	sp.TopK = cfg.TopK
+	sp.PenaltyRepeat = cfg.RepeatPenalty
+	sp.PenaltyFreq = cfg.FreqPenalty
+	sp.PenaltyPresent = cfg.PresencePenalty
+	sp.DryMultiplier = cfg.DryMultiplier
 	smpl := llama.NewSampler(mdl, llama.DefaultSamplers, sp)
 
 	// Auto-detect model format from the model path when not explicitly set.
@@ -283,35 +307,7 @@ func (a *Actor) generateTurn(ctx context.Context, conversation *[]message.Messag
 	var chunks []string
 	pieceBuf := make([]byte, 128)
 
-	// Gemma 4 turn markers use <|turn>role format; also include the
-	// decoded form <turn>role (TokenToPiece strips | on some builds) and
-	// the closing <turn|> token so any variant halts generation.
-	// Also stop at <|channel>thought (and decoded form) since everything
-	// inside a thought channel is internal reasoning, not spoken text.
-	generationStopMarkers := []string{
-		"<|turn>user", "<|turn>model",
-		"<turn>user", "<turn>model",
-		"<turn|>",
-		// Bare turn token without role suffix — emitted by Gemma 4 fine-tunes
-		// as a turn-end marker after the last tool call.
-		"<|turn|>", "<|turn>",
-		"<|channel>thought", "<channel>thought",
-		// ChatML new-message token — stop if Qwen/ChatML model starts
-		// simulating the next conversation turn.
-		"<|im_start|>", "<|im_end|>",
-		// Stop if the model starts simulating tool results — the inline JSON
-		// tool call has already been captured and faking results would just
-		// pollute the generation with garbage tokens.
-		// Both bare forms and underscore forms are listed because the Gemma
-		// template may render tool results as <tool_result>…</tool_result> and
-		// the model echoes that exact form in subsequent generations.
-		"<toolresult", "<|toolresult", "<tool_result",
-		"<toolresponse", "<|toolresponse", "<tool_response",
-		// Stop if the model echoes back a tool result in bare word{...} form.
-		`tool{"status"`,
-		// Stop at Gemma 4 turn-end marker.
-		"<turnend>", "<|turnend>",
-	}
+	generationStopMarkers := message.StopMarkers(a.vocab, a.cfg.ModelFormat)
 
 generateLoop:
 	for i := 0; i < a.cfg.MaxTokens; i++ {
@@ -419,6 +415,23 @@ func (a *Actor) callTools(ctx context.Context, toolCalls []message.ToolCall) []m
 					tool = t
 					exists = true
 					break
+				}
+			}
+		}
+		if !exists {
+			// Fallback: some models (e.g. Phi-4) call movement commands directly
+			// by name (e.g. name="slowlook") instead of using tool_movement with
+			// command="slowlook". Reroute those to tool_movement.
+			if movementTool, ok := a.tools["tool_movement"]; ok {
+				switch toolCall.Function.Name {
+				case "look", "slowlook", "headshake":
+					if toolCall.Function.Arguments == nil {
+						toolCall.Function.Arguments = map[string]string{}
+					}
+					toolCall.Function.Arguments["command"] = toolCall.Function.Name
+					toolCall.Function.Name = "tool_movement"
+					tool = movementTool
+					exists = true
 				}
 			}
 		}
