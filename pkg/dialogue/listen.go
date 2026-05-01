@@ -14,11 +14,12 @@ type Listener struct {
 	client      mqtt.Client
 	whatWasSaid chan commands.Speak
 	voices      map[string]*Voice
+	verbose     bool
 }
 
 // NewListener starts the MQTT client and subscribes to the topic for something that was said.
 // It returns a Listener that can be used to listen for messages and tell the appropriate Voice to say it.
-func NewListener(name, server string, voices map[string]*Voice) (*Listener, error) {
+func NewListener(name, server string, voices map[string]*Voice, verbose bool) (*Listener, error) {
 	if len(voices) == 0 {
 		return nil, errors.New("at least one voice is required")
 	}
@@ -40,6 +41,7 @@ func NewListener(name, server string, voices map[string]*Voice) (*Listener, erro
 		client:      client,
 		whatWasSaid: make(chan commands.Speak, 5),
 		voices:      voices,
+		verbose:     verbose,
 	}
 
 	speakTopic := "speak/#"
@@ -54,7 +56,9 @@ func NewListener(name, server string, voices map[string]*Voice) (*Listener, erro
 }
 
 func (m *Listener) handleSpeaking(client mqtt.Client, msg mqtt.Message) {
-	log.Printf("Received message: %s\n", string(msg.Payload()))
+	if m.verbose {
+		log.Printf("Received message: %s\n", string(msg.Payload()))
+	}
 
 	// parse the payload and extract the text to speak
 	var s commands.Speak
@@ -86,11 +90,13 @@ func (m *Listener) Listen() {
 	}()
 
 	for s := range m.whatWasSaid {
-		log.Printf("Received something said: %s\n", s.What)
+		if m.verbose {
+			log.Printf("Received something said: %s\n", s.What)
+		}
 		if voice, ok := m.voices[s.Who]; ok {
 			queue <- playRequest{voice: voice, who: s.Who, what: s.What}
 		} else {
-			log.Printf("No voice found for %s\n", s.Who)
+			log.Printf("WARNING: No voice found for %s\n", s.Who)
 		}
 	}
 	close(queue)

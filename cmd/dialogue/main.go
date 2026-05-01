@@ -88,6 +88,12 @@ func main() {
 						Name:  "gpu",
 						Usage: "use GPU acceleration for TTS",
 					},
+					&cli.BoolFlag{
+						Name:    "verbose",
+						Usage:   "enable verbose logging",
+						Value:   false,
+						Aliases: []string{"V"},
+					},
 				},
 				Action: sayAction,
 			},
@@ -103,6 +109,7 @@ func serveAction(c *cli.Context) error {
 	server := c.String("server")
 	dataDir := c.String("data")
 	gpu := c.Bool("gpu")
+	verbose := c.Bool("verbose")
 
 	voices := make(map[string]*dialogue.Voice)
 	for _, spec := range c.StringSlice("voice") {
@@ -118,7 +125,7 @@ func serveAction(c *cli.Context) error {
 		voices[name] = v
 	}
 
-	listener, err := dialogue.NewListener("dialogue", server, voices)
+	listener, err := dialogue.NewListener("dialogue", server, voices, verbose)
 	if err != nil {
 		return cli.Exit(err, 1)
 	}

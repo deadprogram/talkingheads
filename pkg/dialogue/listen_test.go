@@ -116,7 +116,7 @@ func TestSomethingSaidJSONFields(t *testing.T) {
 }
 
 func TestNewListenerEmptyVoices(t *testing.T) {
-	_, err := NewListener("test", "tcp://localhost:1883", map[string]*Voice{})
+	_, err := NewListener("test", "tcp://localhost:1883", map[string]*Voice{}, false)
 	if err == nil {
 		t.Fatal("expected error for empty voices map, got nil")
 	}
@@ -126,6 +126,7 @@ func TestHandleSpeakingValidPayload(t *testing.T) {
 	l := &Listener{
 		whatWasSaid: make(chan commands.Speak, 1),
 		voices:      map[string]*Voice{},
+		verbose:     false,
 	}
 
 	payload, _ := json.Marshal(commands.Speak{Who: "alice", What: "hello"})
@@ -150,6 +151,7 @@ func TestHandleSpeakingInvalidPayload(t *testing.T) {
 	l := &Listener{
 		whatWasSaid: make(chan commands.Speak, 1),
 		voices:      map[string]*Voice{},
+		verbose:     false,
 	}
 
 	msg := &mockMessage{payload: []byte("not valid json"), topic: "speak/alice"}
@@ -167,6 +169,7 @@ func TestListenUnknownVoice(t *testing.T) {
 	l := &Listener{
 		whatWasSaid: make(chan commands.Speak, 1),
 		voices:      map[string]*Voice{},
+		verbose:     false,
 	}
 
 	l.whatWasSaid <- commands.Speak{Who: "unknown", What: "hello"}
@@ -178,7 +181,7 @@ func TestListenUnknownVoice(t *testing.T) {
 
 func TestPublishSpeaking_Speaking(t *testing.T) {
 	mc := &mockMQTTClient{}
-	l := &Listener{client: mc, whatWasSaid: make(chan commands.Speak, 1), voices: map[string]*Voice{}}
+	l := &Listener{client: mc, whatWasSaid: make(chan commands.Speak, 1), voices: map[string]*Voice{}, verbose: false}
 
 	l.publishSpeaking("alice", commands.StatusSpeaking)
 
@@ -203,7 +206,7 @@ func TestPublishSpeaking_Speaking(t *testing.T) {
 
 func TestPublishSpeaking_Stopped(t *testing.T) {
 	mc := &mockMQTTClient{}
-	l := &Listener{client: mc, whatWasSaid: make(chan commands.Speak, 1), voices: map[string]*Voice{}}
+	l := &Listener{client: mc, whatWasSaid: make(chan commands.Speak, 1), voices: map[string]*Voice{}, verbose: false}
 
 	l.publishSpeaking("bob", commands.StatusStopped)
 
