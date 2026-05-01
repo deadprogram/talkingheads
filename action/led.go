@@ -19,7 +19,7 @@ var (
 	black  = color.RGBA{R: 0x00, G: 0x00, B: 0x00}
 )
 
-// HeadLED controls the Neopixel LEDs.
+// HeadLED controls the WS2812 LEDs.
 type HeadLED struct {
 	ws2812.Device
 	LED     []color.RGBA

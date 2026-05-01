@@ -1,64 +1,118 @@
+//go:build tinygo
+
 package main
 
 import (
-	"math/rand"
-	"strconv"
-	"strings"
+	"machine"
+	"time"
 )
 
-var (
-	input = make([]byte, 0, 64)
-	mode  = "stop"
+func main() {
+	uart := machine.Serial
+	uart.Configure(machine.UARTConfig{TX: machine.UART_TX_PIN, RX: machine.UART_RX_PIN})
+	head = NewHeadLED()
+	matrix = NewMatrix()
 
-	head        *HeadLED
-	svo         ServoDevice
-	angle       = 90
-	targetAngle = 90
-)
+	go lights()
+	go action()
 
-// handleCommand parses and dispatches a received serial command.
-func handleCommand(cmd string) error {
-	parts := strings.SplitN(strings.TrimSpace(cmd), " ", 2)
-	command := parts[0]
+	for {
+		if uart.Buffered() > 0 {
+			data, _ := uart.ReadByte()
 
-	switch command {
-	case "look", "slowlook":
-		if len(parts) != 2 {
-			return errAngleRequired
+			switch data {
+			case 13:
+				// return key
+				cmd := string(input)
+				input = input[:0]
+				if err := handleCommand(cmd); err != nil {
+					uart.Write([]byte("error: " + err.Error() + "\r\n"))
+				}
+
+			default:
+				// just capture the character
+				input = append(input, data)
+			}
 		}
-		a, err := strconv.Atoi(strings.TrimSpace(parts[1]))
-		if err != nil {
-			return errInvalidAngle
-		}
-		targetAngle = a
-		mode = command
-	case "wait", "speak", "headshake", "stop":
-		mode = command
-	default:
-		return errUnknownCommand
+		time.Sleep(10 * time.Millisecond)
 	}
-	return nil
 }
 
-// Returns an int >= min, < max
-func randomInt(min, max int) int {
-	return min + rand.Intn(max-min)
+func lights() {
+	for {
+		switch mode {
+		case "speak":
+			head.Alternate(green, blue)
+			matrix.Start()
+		case "wait":
+			head.Green()
+			matrix.Start()
+		case "headshake":
+			head.Red()
+			matrix.Start()
+		default:
+			head.Off()
+			matrix.Stop()
+		}
+
+		time.Sleep(100 * time.Millisecond)
+	}
 }
 
-const maxMovement = 15
+func action() {
+	svo, _ = NewServo()
 
-// keep movement to maxMovement degrees at a time
-func movement(current, target int) int {
-	if current < target {
-		if target-current > maxMovement {
-			return current + maxMovement
+	var waitCounter, speakCounter int
+
+	for {
+		switch mode {
+		case "look":
+			svo.SetAngle(targetAngle)
+			angle = targetAngle
+			mode = "stop"
+
+		case "slowlook":
+			angle = movement(angle, targetAngle)
+			svo.SetAngle(angle)
+			if angle == targetAngle {
+				mode = "stop"
+			}
+
+		case "wait":
+			// Move a small amount once every 5 seconds (25 × 200ms iterations).
+			waitCounter++
+			if waitCounter >= 25 {
+				waitCounter = 0
+				jitter := randomInt(-5, 6)
+				svo.SetAngle(angle + jitter)
+			}
+
+		case "speak":
+			// Move a small amount once every second (5 × 200ms iterations).
+			speakCounter++
+			if speakCounter >= 5 {
+				speakCounter = 0
+				jitter := randomInt(-10, 11)
+				svo.SetAngle(angle + jitter)
+			}
+
+		case "headshake":
+			// Move back and forth 3 times to indicate "No".
+			for i := 0; i < 3; i++ {
+				svo.SetAngle(60)
+				time.Sleep(300 * time.Millisecond)
+				svo.SetAngle(120)
+				time.Sleep(300 * time.Millisecond)
+			}
+			svo.SetAngle(90)
+			angle = 90
+			mode = "stop"
+
+		case "stop":
+			svo.SetAngle(90)
+			angle = 90
 		}
-		return target
-	} else if current > target {
-		if current-target > maxMovement {
-			return current - maxMovement
-		}
-		return target
+
+		time.Sleep(200 * time.Millisecond)
 	}
-	return current
 }
