@@ -7,10 +7,12 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 
 	"github.com/deadprogram/talkingheads/pkg/actor"
+	"github.com/hybridgroup/yzma/pkg/download"
 	"github.com/hybridgroup/yzma/pkg/message"
 	"github.com/urfave/cli/v2"
 )
@@ -24,14 +26,25 @@ func main() {
 		},
 		Flags: []cli.Flag{
 			&cli.StringFlag{
+				Name:    "libpath",
+				Usage:   "path to the llama.cpp library directory",
+				Aliases: []string{"l"},
+			},
+			&cli.StringFlag{
+				Name:    "processor",
+				Usage:   "processor to use (cpu or cuda)",
+				Aliases: []string{"p"},
+				Value:   "",
+			},
+			&cli.StringFlag{
 				Name:    "model-url",
 				Usage:   "URL of the model to download and use (e.g. a HuggingFace URL)",
 				Aliases: []string{"u"},
 			},
-			&cli.StringFlag{
-				Name:    "model-path",
-				Usage:   "local path to a pre-downloaded model file",
-				Aliases: []string{"p"},
+			&cli.BoolFlag{
+				Name:  "update-install",
+				Usage: "update the installation of yzma if a new version of llama.cpp is available",
+				Value: false,
 			},
 			&cli.StringSliceFlag{
 				Name:    "script",
@@ -124,29 +137,37 @@ func main() {
 
 func run(c *cli.Context) error {
 	modelURL := c.String("model-url")
-	modelPath := c.String("model-path")
+	processor := c.String("processor")
+	updateInstall := c.Bool("update-install")
 	scriptFiles := c.StringSlice("script")
 	server := c.String("server")
 	name := c.String("name")
 	serialPort := c.String("serial")
 	baudRate := c.Int("baud")
 
-	if modelURL == "" && modelPath == "" {
-		return cli.Exit("one of --model-url or --model-path is required", 1)
-	}
-	if modelURL != "" && modelPath != "" {
-		return cli.Exit("--model-url and --model-path are mutually exclusive", 1)
+	if len(modelURL) == 0 {
+		return cli.Exit("--model-url is required", 1)
 	}
 
-	var err error
-
-	if modelURL != "" {
-		log.Println("downloading model, this may take a while...")
-		modelPath, err = actor.InstallSystem(modelURL)
-		if err != nil {
-			return cli.Exit(fmt.Sprintf("failed to install model: %v", err), 1)
-		}
+	libPath := c.String("libpath")
+	if len(libPath) == 0 && os.Getenv("YZMA_LIB") != "" {
+		libPath = os.Getenv("YZMA_LIB")
 	}
+
+	if len(libPath) == 0 {
+		return cli.Exit("library path is required (set with --libpath or YZMA_LIB environment variable)", 1)
+	}
+
+	if err := actor.EnsureInstall(libPath, processor, updateInstall); err != nil {
+		return cli.Exit(fmt.Sprintf("failed to install yzma: %v", err), 1)
+	}
+
+	if err := actor.EnsureModel(modelURL, download.DefaultModelsDir()); err != nil {
+		return cli.Exit(fmt.Sprintf("failed to download model: %v", err), 1)
+	}
+
+	modelName := filepath.Base(modelURL)
+	modelPath := filepath.Join(download.DefaultModelsDir(), modelName)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()

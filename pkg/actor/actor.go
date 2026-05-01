@@ -2,17 +2,12 @@ package actor
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"os"
-	"path/filepath"
 	"regexp"
-	"runtime"
 	"strings"
-	"time"
 
-	"github.com/hybridgroup/yzma/pkg/download"
 	"github.com/hybridgroup/yzma/pkg/llama"
 	"github.com/hybridgroup/yzma/pkg/message"
 	"github.com/hybridgroup/yzma/pkg/template"
@@ -455,132 +450,6 @@ func (a *Actor) callTools(ctx context.Context, toolCalls []message.ToolCall) []m
 	}
 
 	return resps
-}
-
-// InstallSystem downloads the llama.cpp libraries (to YZMA_LIB) and a model
-// from the given URL (to ~/models/). It returns the local path to the model file.
-func InstallSystem(modelURL string) (string, error) {
-	libPath := os.Getenv("YZMA_LIB")
-	if libPath == "" {
-		return "", fmt.Errorf("YZMA_LIB environment variable not set")
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Minute)
-	defer cancel()
-
-	if !download.AlreadyInstalled(libPath) {
-		version, err := download.LlamaLatestVersion()
-		if err != nil {
-			return "", fmt.Errorf("unable to get latest llama.cpp version: %w", err)
-		}
-
-		log.Println("installing llama.cpp libraries...")
-		if err := download.GetWithContext(ctx, runtime.GOARCH, runtime.GOOS, "cpu", version, libPath, download.ProgressTracker); err != nil {
-			return "", fmt.Errorf("unable to install llama.cpp: %w", err)
-		}
-	}
-
-	modelsDir := download.DefaultModelsDir()
-	if err := os.MkdirAll(modelsDir, 0o750); err != nil {
-		return "", fmt.Errorf("unable to create models directory: %w", err)
-	}
-
-	modelPath := filepath.Join(modelsDir, modelFilename(modelURL))
-	log.Println("downloading model...")
-	if err := download.GetModelWithContext(ctx, modelURL, modelPath, download.ProgressTracker); err != nil {
-		return "", fmt.Errorf("unable to download model: %w", err)
-	}
-
-	return modelPath, nil
-}
-
-// marshalToolDocs formats a slice of tool documents as a JSON array string for
-// injection into the system prompt.
-func marshalToolDocs(docs []message.ToolDefinition) string {
-	b, err := json.MarshalIndent(docs, "", "  ")
-	if err != nil {
-		return "[]"
-	}
-	return string(b)
-}
-
-// injectToolsIntoSystemPrompt appends tool definitions and usage instructions
-// to the system prompt using the format appropriate for the model.
-func injectToolsIntoSystemPrompt(systemPrompt, toolsJSON string, format message.Format) string {
-	if toolsJSON == "" || toolsJSON == "[]" {
-		return systemPrompt
-	}
-	if format == message.FormatGemma {
-		return systemPrompt + fmt.Sprintf(`
-
-You have access to the following tools:
-%s
-
-To use a tool, include call: syntax directly in your response alongside your spoken text:
-  call:funcname{key:<|"|>value<|"|>}
-For numeric values omit the quote tokens:
-  call:tool_movement{command:<|"|>look<|"|>angle:90}
-
-IMPORTANT rules:
-- Only use the exact tool names and command values listed above. Do not invent commands.
-- The angle parameter for 'look' and 'slowlook' MUST be inside the braces, e.g. angle:90. Never write angle: outside the braces.
-- Do NOT write parenthetical stage directions like (character turns left) in your text. Use tool calls instead.
-
-Example of a correct response — spoken text and tool calls in the same turn:
-  Hello! I'm doing wonderfully today.
-  call:tool_movement{command:<|"|>speak<|"|>}
-  I looked to the right just now.
-  call:tool_movement{command:<|"|>look<|"|>angle:45}
-  call:tool_movement{command:<|"|>wait<|"|>}
-
-A response with only tool calls and no spoken text is invalid.`, toolsJSON)
-	}
-	if format == message.FormatQwen {
-		return systemPrompt + fmt.Sprintf(`
-
-You have access to the following tools:
-%s
-
-When you need to use a tool, use this exact format:
-<function=function_name>
-<parameter=arg1>value1</parameter>
-</function>
-
-IMPORTANT: Your spoken words MUST appear as plain text OUTSIDE any <function=…></function> blocks.
-Tool calls are physical action cues only — they do NOT replace spoken text.
-Calling tool_movement with command "speak" is a head-motion cue, NOT a verbal response.
-You MUST still write the actual words you want to say as plain text in your response.
-
-Example of a correct response — plain text first, then motion tool calls:
-Hello! I'm doing wonderfully today.
-<function=tool_movement>
-<parameter=command>speak</parameter>
-</function>
-<function=tool_movement>
-<parameter=command>wait</parameter>
-</function>
-
-A response with only <function=…></function> blocks and no plain text is ALWAYS wrong.`, toolsJSON)
-	}
-	return systemPrompt + fmt.Sprintf(`
-
-You have access to the following tools:
-%s
-
-When you need to use a tool, respond with a tool call in the following format:
-<tool_call>
-{"name": "function_name", "arguments": {"arg1": "value1"}}
-</tool_call>
-After receiving tool results, continue your response normally.`, toolsJSON)
-}
-
-// modelFilename extracts a safe filename from a model URL.
-func modelFilename(rawURL string) string {
-	base := filepath.Base(rawURL)
-	if i := strings.IndexByte(base, '?'); i >= 0 {
-		base = base[:i]
-	}
-	return base
 }
 
 // normalizeToolName returns a lowercase version of name with underscores and
