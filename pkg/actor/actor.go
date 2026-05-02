@@ -7,6 +7,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/hybridgroup/yzma/pkg/llama"
 	"github.com/hybridgroup/yzma/pkg/message"
@@ -23,6 +24,8 @@ const (
 	DefaultFreqPenalty     = float32(0.0) // 0.0 = disabled
 	DefaultPresencePenalty = float32(0.0) // 0.0 = disabled
 	DefaultDryMultiplier   = float32(0.0) // 0.0 = disabled
+	DefaultBatchSize       = uint32(0)    // 0 = use llama.cpp default
+	DefaultUBatchSize      = uint32(0)    // 0 = use llama.cpp default
 )
 
 // Config holds the tunable parameters for an Actor.
@@ -32,6 +35,10 @@ type Config struct {
 	TopK        int32
 	MaxTokens   int
 	ContextSize uint32
+	// BatchSize is the logical maximum batch size (n_batch). 0 = use llama.cpp default.
+	BatchSize uint32
+	// UBatchSize is the physical maximum micro-batch size (n_ubatch). 0 = use llama.cpp default.
+	UBatchSize uint32
 	// RepeatPenalty penalises recently-seen tokens to reduce repetition.
 	// 1.0 = disabled; values around 1.1–1.3 are effective for verbose models.
 	RepeatPenalty float32
@@ -57,6 +64,12 @@ type Config struct {
 	// to skip chain-of-thought reasoning and respond directly. Defaults to
 	// false to avoid spoken thinking content being published via MQTT.
 	EnableThinking bool
+	// UseMmap controls whether the model file is loaded via mmap.
+	// Defaults to true. Set to false to disable mmap (e.g. when loading from
+	// a network filesystem that does not support mmap).
+	UseMmap bool
+	// Verbose enables verbose logging for debugging.
+	Verbose bool
 }
 
 // DefaultConfig returns a Config populated with sensible defaults.
@@ -67,12 +80,16 @@ func DefaultConfig() Config {
 		TopK:            DefaultTopK,
 		MaxTokens:       DefaultMaxTokens,
 		ContextSize:     DefaultContextSize,
+		BatchSize:       DefaultBatchSize,
+		UBatchSize:      DefaultUBatchSize,
 		RepeatPenalty:   DefaultRepeatPenalty,
 		FreqPenalty:     DefaultFreqPenalty,
 		PresencePenalty: DefaultPresencePenalty,
 		DryMultiplier:   DefaultDryMultiplier,
 		InjectTools:     true,
 		EnableThinking:  false,
+		UseMmap:         true,
+		Verbose:         false,
 	}
 }
 
@@ -84,6 +101,12 @@ type Actor struct {
 	vocab        llama.Vocab
 	sampler      llama.Sampler
 	chatTemplate string
+
+	// nCachedPrompt is the number of prompt tokens currently held in the KV /
+	// recurrent cache from the previous turn. It is used to implement
+	// incremental decoding: only tokens beyond this offset need to be decoded
+	// each turn, saving the cost of re-decoding the entire conversation history.
+	nCachedPrompt int
 
 	moreConversationFunc func(conversation *[]message.Message)
 	outputFunc           func(content string)
@@ -104,18 +127,30 @@ func NewActor(modelPath string, cfg Config, commander Commander, moreFunc func(c
 		return nil, fmt.Errorf("unable to load llama.cpp: %w", err)
 	}
 
-	llama.LogSet(llama.LogSilent())
+	if !cfg.Verbose {
+		llama.LogSet(llama.LogSilent())
+	}
 	llama.Init()
 
 	log.Println("loading model...")
 
-	mdl, err := llama.ModelLoadFromFile(modelPath, llama.ModelDefaultParams())
+	modelParams := llama.ModelDefaultParams()
+	if !cfg.UseMmap {
+		modelParams.UseMmap = 0
+	}
+	mdl, err := llama.ModelLoadFromFile(modelPath, modelParams)
 	if err != nil {
 		return nil, fmt.Errorf("unable to load model: %w", err)
 	}
 
 	ctxParams := llama.ContextDefaultParams()
 	ctxParams.NCtx = cfg.ContextSize
+	if cfg.BatchSize > 0 {
+		ctxParams.NBatch = cfg.BatchSize
+	}
+	if cfg.UBatchSize > 0 {
+		ctxParams.NUbatch = cfg.UBatchSize
+	}
 	lctx, err := llama.InitFromModel(mdl, ctxParams)
 	if err != nil {
 		llama.ModelFree(mdl)
@@ -173,6 +208,12 @@ func (a *Actor) Close() {
 
 // Run starts the actor and runs the chat loop.
 func (a *Actor) Run(ctx context.Context, systemPrompt string) error {
+	// Set the abort callback once for the duration of the run so that
+	// llama.Decode is interrupted immediately when the context is cancelled.
+	// Done here rather than per-turn to avoid a log line on every turn.
+	llama.SetAbortCallback(a.llamaCtx, func() bool { return ctx.Err() != nil })
+	defer llama.SetAbortCallback(a.llamaCtx, nil)
+
 	sysContent := systemPrompt
 	if a.cfg.InjectTools {
 		sysContent = injectToolsIntoSystemPrompt(systemPrompt, a.toolsJSON, a.cfg.ModelFormat)
@@ -188,8 +229,19 @@ func (a *Actor) Run(ctx context.Context, systemPrompt string) error {
 	for {
 		if needMoreInput {
 			consecutiveToolOnlyTurns = 0
+			before := len(conversation)
 			if ok := a.GetMore(&conversation); !ok {
 				return nil
+			}
+			if len(conversation) == before {
+				// moreFunc returned without adding anything — check if context
+				// was cancelled, otherwise loop back and wait for the next message.
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				default:
+					continue
+				}
 			}
 		}
 
@@ -200,6 +252,32 @@ func (a *Actor) Run(ctx context.Context, systemPrompt string) error {
 
 		if len(toolCalls) > 0 {
 			toolResults := a.callTools(ctx, toolCalls)
+
+			if !a.templateSupportsToolMessages() {
+				// Format has no tool-role support (e.g. Gemma 3). Tool calls are
+				// fire-and-forget physical action cues; never append tool call or
+				// tool result messages to the conversation history.
+				if hadText {
+					a.appendAssistant(&conversation, content)
+					consecutiveToolOnlyTurns = 0
+					needMoreInput = true
+				} else {
+					consecutiveToolOnlyTurns++
+					if consecutiveToolOnlyTurns >= maxConsecutiveToolOnlyTurns {
+						log.Printf("breaking tool-call loop after %d consecutive tool-only turns", consecutiveToolOnlyTurns)
+						consecutiveToolOnlyTurns = 0
+						needMoreInput = true
+					} else {
+						conversation = append(conversation, message.Chat{
+							Role:    "user",
+							Content: "You called motion tools but included no spoken words. You MUST write your actual answer as plain text. Reply now with spoken sentences.",
+						})
+						log.Printf("tool-only turn %d/%d, nudging for verbal response", consecutiveToolOnlyTurns, maxConsecutiveToolOnlyTurns)
+						needMoreInput = false
+					}
+				}
+				continue
+			}
 
 			if hadText {
 				// Text was spoken alongside the tool calls — record the full
@@ -258,17 +336,9 @@ func (a *Actor) generateTurn(ctx context.Context, conversation *[]message.Messag
 		return "", false, nil, fmt.Errorf("error applying chat template: %w", err)
 	}
 
-	mem, err := llama.GetMemory(a.llamaCtx)
-	if err != nil {
-		return "", false, nil, fmt.Errorf("error getting memory: %w", err)
-	}
-	if err := llama.MemoryClear(mem, true); err != nil {
-		return "", false, nil, fmt.Errorf("error clearing memory: %w", err)
-	}
-
 	llama.SamplerReset(a.sampler)
 
-	tokens := llama.Tokenize(a.vocab, prompt, true, false)
+	tokens := llama.Tokenize(a.vocab, prompt, true, true)
 
 	// Trim oldest non-system messages if the prompt exceeds the context window.
 	if nCtx := int(llama.NCtx(a.llamaCtx)); nCtx > 0 {
@@ -285,11 +355,56 @@ func (a *Actor) generateTurn(ctx context.Context, conversation *[]message.Messag
 		}
 	}
 
+	mem, err := llama.GetMemory(a.llamaCtx)
+	if err != nil {
+		return "", false, nil, fmt.Errorf("error getting memory: %w", err)
+	}
+
+	// Incremental decode: reuse the cached prompt prefix from the previous turn
+	// and only decode the tokens added since then. This avoids re-decoding the
+	// entire conversation history on every turn (the main source of latency on
+	// slow hardware). When the prompt shrank (context trimming dropped old
+	// messages), the cached prefix is no longer valid — fall back to full clear.
+	var decodeFrom int
+	t0 := time.Now()
+	if a.nCachedPrompt > 0 && len(tokens) >= a.nCachedPrompt {
+		// Trim the tail of the cache (generated tokens from last turn) so that
+		// positions nCachedPrompt..∞ are freed, keeping the prompt prefix intact.
+		if ok, rmErr := llama.MemorySeqRm(mem, 0, llama.Pos(a.nCachedPrompt), -1); ok && rmErr == nil {
+			decodeFrom = a.nCachedPrompt
+			if a.cfg.Verbose {
+				log.Printf("[verbose] cache trim: kept %d cached tokens, removed tail (%v)", a.nCachedPrompt, time.Since(t0))
+			}
+		} else {
+			// MemorySeqRm failed (shouldn't happen): full clear.
+			if clearErr := llama.MemoryClear(mem, true); clearErr != nil {
+				return "", false, nil, fmt.Errorf("error clearing memory: %w", clearErr)
+			}
+			a.nCachedPrompt = 0
+			if a.cfg.Verbose {
+				log.Printf("[verbose] cache trim failed, full clear (%v)", time.Since(t0))
+			}
+		}
+	} else {
+		// First turn or prompt shrank due to context trimming: full clear.
+		if clearErr := llama.MemoryClear(mem, true); clearErr != nil {
+			return "", false, nil, fmt.Errorf("error clearing memory: %w", clearErr)
+		}
+		a.nCachedPrompt = 0
+		if a.cfg.Verbose {
+			log.Printf("[verbose] memory clear: %v", time.Since(t0))
+		}
+	}
+
 	nBatch := int(llama.NBatch(a.llamaCtx))
 	if nBatch <= 0 {
 		nBatch = 512
 	}
-	for i := 0; i < len(tokens); i += nBatch {
+	if a.cfg.Verbose {
+		log.Printf("[verbose] prompt decode: %d new tokens (of %d total), batch size %d", len(tokens)-decodeFrom, len(tokens), nBatch)
+	}
+	t1 := time.Now()
+	for i := decodeFrom; i < len(tokens); i += nBatch {
 		end := i + nBatch
 		if end > len(tokens) {
 			end = len(tokens)
@@ -298,11 +413,19 @@ func (a *Actor) generateTurn(ctx context.Context, conversation *[]message.Messag
 			return "", false, nil, fmt.Errorf("error decoding prompt: %w", err)
 		}
 	}
+	if a.cfg.Verbose {
+		log.Printf("[verbose] prompt decode done: %v", time.Since(t1))
+	}
+
+	a.nCachedPrompt = len(tokens)
 
 	var chunks []string
 	pieceBuf := make([]byte, 128)
 
 	generationStopMarkers := message.StopMarkers(a.vocab, a.cfg.ModelFormat)
+
+	t2 := time.Now()
+	tokenCount := 0
 
 generateLoop:
 	for i := 0; i < a.cfg.MaxTokens; i++ {
@@ -316,6 +439,7 @@ generateLoop:
 		if llama.VocabIsEOG(a.vocab, token) {
 			break
 		}
+		tokenCount++
 
 		n := llama.TokenToPiece(a.vocab, token, pieceBuf, 0, true)
 		if n > 0 {
@@ -335,6 +459,11 @@ generateLoop:
 			// the entire MaxTokens budget without producing any spoken text.
 			const maxToolCallBlocksPerGeneration = 8
 			toolCallCount := strings.Count(full, "</tool_call>") + strings.Count(full, "</function>")
+			// Also count Gemma/Gemma3 call: blocks, which use a closing brace
+			// instead of an XML tag.
+			if a.cfg.ModelFormat == message.FormatGemma || a.cfg.ModelFormat == message.FormatGemma3 {
+				toolCallCount += strings.Count(full, "call:tool_")
+			}
 			if toolCallCount >= maxToolCallBlocksPerGeneration {
 				log.Printf("stopping generation: accumulated %d tool call blocks", toolCallCount)
 				break generateLoop
@@ -346,7 +475,22 @@ generateLoop:
 		}
 	}
 
+	if a.cfg.Verbose {
+		elapsed := time.Since(t2)
+		tps := float64(tokenCount) / elapsed.Seconds()
+		log.Printf("[verbose] generation: %d tokens in %v (%.2f t/s)", tokenCount, elapsed, tps)
+	}
+
 	text := strings.TrimSpace(strings.TrimLeft(strings.Join(chunks, ""), "\n"))
+
+	// Strip <think> / </think> tags before any further processing. Qwen3 with
+	// no_think still emits </think> after function blocks, which confuses
+	// StripMarkup: its orphaned-</think> handler strips everything before the
+	// first </think> (including the text preceding the first function call).
+	text = strings.ReplaceAll(text, "<think>", "")
+	text = strings.ReplaceAll(text, "</think>", "")
+	text = strings.TrimSpace(text)
+
 	log.Printf("raw generation: %q", text)
 
 	toolCalls := message.ParseToolCalls(text)
@@ -460,6 +604,14 @@ func normalizeToolName(name string) string {
 	name = strings.ReplaceAll(name, "_", "")
 	name = strings.ReplaceAll(name, "-", "")
 	return name
+}
+
+// templateSupportsToolMessages reports whether the model's chat template
+// supports dedicated tool and tool-result conversation roles. When false
+// (e.g. Gemma 3), tool calls are treated as fire-and-forget physical action
+// cues and their results are never appended to the conversation history.
+func (a *Actor) templateSupportsToolMessages() bool {
+	return a.cfg.ModelFormat != message.FormatGemma3
 }
 
 // orphanAngleRE matches bare "angle:N" tokens that models write outside the

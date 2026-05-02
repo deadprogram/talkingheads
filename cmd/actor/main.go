@@ -96,6 +96,16 @@ func main() {
 				Usage: "KV cache / context window size in tokens",
 				Value: int(actor.DefaultContextSize),
 			},
+			&cli.IntFlag{
+				Name:  "batch-size",
+				Usage: "logical maximum batch size (n_batch); 0 = use llama.cpp default",
+				Value: int(actor.DefaultBatchSize),
+			},
+			&cli.IntFlag{
+				Name:  "ubatch-size",
+				Usage: "physical maximum micro-batch size (n_ubatch); 0 = use llama.cpp default",
+				Value: int(actor.DefaultUBatchSize),
+			},
 			&cli.BoolFlag{
 				Name:  "inject-tools",
 				Usage: "enable injecting tool definitions into the system prompt (useful for models with native tool-call support)",
@@ -126,6 +136,11 @@ func main() {
 				Usage: "DRY repetition penalty multiplier (0.0 = disabled; try 0.8 to curb looping)",
 				Value: float64(actor.DefaultDryMultiplier),
 			},
+			&cli.BoolFlag{
+				Name:  "verbose",
+				Usage: "enable verbose logging for debugging",
+				Value: false,
+			},
 		},
 		Action: run,
 	}
@@ -139,6 +154,7 @@ func run(c *cli.Context) error {
 	modelURL := c.String("model-url")
 	processor := c.String("processor")
 	updateInstall := c.Bool("update-install")
+	verbose := c.Bool("verbose")
 	scriptFiles := c.StringSlice("script")
 	server := c.String("server")
 	name := c.String("name")
@@ -230,12 +246,15 @@ func run(c *cli.Context) error {
 		TopK:            int32(c.Int("top-k")),
 		MaxTokens:       c.Int("max-tokens"),
 		ContextSize:     uint32(c.Int("context-size")),
+		BatchSize:       uint32(c.Int("batch-size")),
+		UBatchSize:      uint32(c.Int("ubatch-size")),
 		InjectTools:     c.Bool("inject-tools"),
 		EnableThinking:  c.Bool("enable-thinking"),
 		RepeatPenalty:   float32(c.Float64("repeat-penalty")),
 		FreqPenalty:     float32(c.Float64("freq-penalty")),
 		PresencePenalty: float32(c.Float64("presence-penalty")),
 		DryMultiplier:   float32(c.Float64("dry-multiplier")),
+		Verbose:         verbose,
 	}, commander, moreFunc, outputFunc)
 	if err != nil {
 		return cli.Exit(fmt.Sprintf("failed to create actor: %v", err), 1)

@@ -62,15 +62,13 @@ func injectToolsIntoSystemPrompt(systemPrompt, toolsJSON string, format message.
 	if toolsJSON == "" || toolsJSON == "[]" {
 		return systemPrompt
 	}
-	if format == message.FormatGemma {
+	if format == message.FormatGemma3 || format == message.FormatGemma {
 		return systemPrompt + fmt.Sprintf(`
 
 You have access to the following tools:
 %s
 
-To use a tool, include call: syntax directly in your response alongside your spoken text:
-  call:funcname{key:<|"|>value<|"|>}
-For numeric values omit the quote tokens:
+Tool calls use this syntax directly in your response alongside your spoken text:
   call:tool_movement{command:<|"|>look<|"|>angle:90}
 
 IMPORTANT rules:
@@ -82,7 +80,6 @@ Example of a correct response — spoken text and tool calls in the same turn:
   Hello! I'm doing wonderfully today.
   call:tool_movement{command:<|"|>look<|"|>angle:45}
   I looked to the right just now.
-  call:tool_movement{command:<|"|>wait<|"|>}
 
 A response with only tool calls and no spoken text is invalid.`, toolsJSON)
 	}
