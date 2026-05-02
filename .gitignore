@@ -1,3 +1,9 @@
 build/
 voices/
 scripts/*
+*.hex
+*.elf
+*.bin
+*.o
+*.log
+*.tmp
