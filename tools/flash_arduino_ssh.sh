@@ -3,17 +3,18 @@
 ALLOW_SSH_AUTH_WITH_PASSWORD="-o PreferredAuthentications=password -o PasswordAuthentication=yes"
 
 # Ensure a source argument was provided
-if [ "$#" -lt 2 ] || [ "$#" -gt 3 ]; then
-    echo "Usage: $0 <path_to_source> <ip_address_or_hostname> [username]"
+if [ "$#" -lt 3 ] || [ "$#" -gt 4 ]; then
+    echo "Usage: $0 <path_to_source> <name_of_program> <ip_address_or_hostname> [username]"
     exit 1
 fi
 
 # 1. Use tinygo to build the firmware and generate a .hex file
 SOURCE_PATH="$1"
-TARGET_HOST="$2"
-TARGET_USER="${3:-arduino}"
+PROGRAM_NAME="$2"
+TARGET_HOST="$3"
+TARGET_USER="${4:-arduino}"
 TARGET="$TARGET_USER@$TARGET_HOST"
-HEX_OUTPUT_PATH="${SOURCE_PATH%.*}.hex"
+HEX_OUTPUT_PATH="${PROGRAM_NAME%.*}.hex"
 echo "Building firmware from source '$SOURCE_PATH'..."
 if ! tinygo build -o "$HEX_OUTPUT_PATH" -target=arduino-uno-q "$SOURCE_PATH"; then
     echo "Error: Failed to build firmware from $SOURCE_PATH"
