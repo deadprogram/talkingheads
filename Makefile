@@ -1,10 +1,12 @@
 .ONESHELL:
 
-test:
+test: test-pkg test-action
+
+test-pkg:
 	go test -v $(shell go list ./pkg/... | grep -v hotmic)
 
-show:
-	tmuxinator s talkingheads -p ./talkingheads.yml
+test-action:
+	cd action && go test -v
 
 clean:
 	rm -rf build
@@ -23,24 +25,18 @@ director:
 	export CGO_LDFLAGS="-L$${WHISPER_DIR} -lwhisper -lggml -lm -lstdc++"
 	cd cmd/director && go build -o ../../build/director
 
-deploy-actor:
+arduino-actor:
 	cd cmd/actor && GOARCH=arm64 GOOS=linux go build -o ../../build/actor_arm64
 
+flash-arduino-actor:
+	# TODO: stop the running service on the Arduino before flashing
+	adb push ./build/actor_arm64 /home/arduino/actor
+
 flash-action:
-	cd action && tinygo flash -target=arduino-uno-q .
+	cd action && tinygo flash -target=arduino-uno-q -tags noservo .
 
 mqtt:
 	docker run -d --network host eclipse-mosquitto
 
-run-dialogue:
-	./build/dialogue serve --server localhost:1883 --voice gemmai:en_US:amy-low
-
-run-director:
-	./build/director --server localhost:1883
-
-run-gemmai:
-	./build/actor --model-path ~/models/Qwen3.5-4B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf \
-      --server tcp://localhost:1883 \
-      --name gemmai \
-      --script ./scripts/gemmai.md \
-      --script ./scripts/movement.md
+show:
+	tmuxinator s talkingheads -p ./talkingheads.yml
