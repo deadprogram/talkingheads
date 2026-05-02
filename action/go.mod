@@ -1,4 +1,4 @@
-module github.com/deadprogram/talkingheads/hardware
+module github.com/deadprogram/talkingheads/action
 
 go 1.24.4
 

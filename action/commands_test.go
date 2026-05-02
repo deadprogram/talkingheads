@@ -4,107 +4,107 @@ import "testing"
 
 // resetState resets the global command state before each test.
 func resetState() {
-	mode = "stop"
+	mode = StateStopped
 	targetAngle = 90
 }
 
-func TestHandleCommand_Look(t *testing.T) {
+func TestProcessCommand_Look(t *testing.T) {
 	resetState()
-	if err := handleCommand("look 135"); err != nil {
+	if err := processCommand("look 135"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if mode != "look" {
-		t.Errorf("mode = %q, want %q", mode, "look")
+	if mode != StateLooking {
+		t.Errorf("mode = %q, want %q", mode, StateLooking)
 	}
 	if targetAngle != 135 {
 		t.Errorf("targetAngle = %d, want 135", targetAngle)
 	}
 }
 
-func TestHandleCommand_LookMissingAngle(t *testing.T) {
+func TestProcessCommand_LookMissingAngle(t *testing.T) {
 	resetState()
-	if err := handleCommand("look"); err != errAngleRequired {
+	if err := processCommand("look"); err != errAngleRequired {
 		t.Errorf("err = %v, want errAngleRequired", err)
 	}
 }
 
-func TestHandleCommand_LookInvalidAngle(t *testing.T) {
+func TestProcessCommand_LookInvalidAngle(t *testing.T) {
 	resetState()
-	if err := handleCommand("look abc"); err != errInvalidAngle {
+	if err := processCommand("look abc"); err != errInvalidAngle {
 		t.Errorf("err = %v, want errInvalidAngle", err)
 	}
 }
 
-func TestHandleCommand_SlowLook(t *testing.T) {
+func TestProcessCommand_SlowLook(t *testing.T) {
 	resetState()
-	if err := handleCommand("slowlook 45"); err != nil {
+	if err := processCommand("slowlook 45"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if mode != "slowlook" {
-		t.Errorf("mode = %q, want %q", mode, "slowlook")
+	if mode != StateSlowLooking {
+		t.Errorf("mode = %q, want %q", mode, StateSlowLooking)
 	}
 	if targetAngle != 45 {
 		t.Errorf("targetAngle = %d, want 45", targetAngle)
 	}
 }
 
-func TestHandleCommand_SlowLookMissingAngle(t *testing.T) {
+func TestProcessCommand_SlowLookMissingAngle(t *testing.T) {
 	resetState()
-	if err := handleCommand("slowlook"); err != errAngleRequired {
+	if err := processCommand("slowlook"); err != errAngleRequired {
 		t.Errorf("err = %v, want errAngleRequired", err)
 	}
 }
 
-func TestHandleCommand_Wait(t *testing.T) {
+func TestProcessCommand_Wait(t *testing.T) {
 	resetState()
-	if err := handleCommand("wait"); err != nil {
+	if err := processCommand("wait"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if mode != "wait" {
-		t.Errorf("mode = %q, want %q", mode, "wait")
+	if mode != StateWaiting {
+		t.Errorf("mode = %q, want %q", mode, StateWaiting)
 	}
 }
 
-func TestHandleCommand_Speak(t *testing.T) {
+func TestProcessCommand_Speak(t *testing.T) {
 	resetState()
-	if err := handleCommand("speak"); err != nil {
+	if err := processCommand("speak"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if mode != "speak" {
-		t.Errorf("mode = %q, want %q", mode, "speak")
+	if mode != StateSpeaking {
+		t.Errorf("mode = %q, want %q", mode, StateSpeaking)
 	}
 }
 
-func TestHandleCommand_Headshake(t *testing.T) {
+func TestProcessCommand_Headshake(t *testing.T) {
 	resetState()
-	if err := handleCommand("headshake"); err != nil {
+	if err := processCommand("headshake"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if mode != "headshake" {
-		t.Errorf("mode = %q, want %q", mode, "headshake")
+	if mode != StateHeadShaking {
+		t.Errorf("mode = %q, want %q", mode, StateHeadShaking)
 	}
 }
 
-func TestHandleCommand_Stop(t *testing.T) {
+func TestProcessCommand_Stop(t *testing.T) {
 	resetState()
-	if err := handleCommand("stop"); err != nil {
+	if err := processCommand("stop"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if mode != "stop" {
-		t.Errorf("mode = %q, want %q", mode, "stop")
+	if mode != StateStopped {
+		t.Errorf("mode = %q, want %q", mode, StateStopped)
 	}
 }
 
-func TestHandleCommand_UnknownCommand(t *testing.T) {
+func TestProcessCommand_UnknownCommand(t *testing.T) {
 	resetState()
-	if err := handleCommand("dance"); err != errUnknownCommand {
+	if err := processCommand("dance"); err != errUnknownCommand {
 		t.Errorf("err = %v, want errUnknownCommand", err)
 	}
 }
 
-func TestHandleCommand_TrimsWhitespace(t *testing.T) {
+func TestProcessCommand_TrimsWhitespace(t *testing.T) {
 	resetState()
-	if err := handleCommand("  look   90  "); err != nil {
+	if err := processCommand("  look   90  "); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if targetAngle != 90 {

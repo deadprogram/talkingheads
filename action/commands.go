@@ -8,7 +8,7 @@ import (
 
 var (
 	input = make([]byte, 0, 64)
-	mode  = "stop"
+	mode  = StateStopped
 
 	head        *HeadLED
 	matrix      *Matrix
@@ -17,13 +17,31 @@ var (
 	targetAngle = 90
 )
 
-// handleCommand parses and dispatches a received serial command.
-func handleCommand(cmd string) error {
+const (
+	// Command constants for serial input.
+	CommandLook      = "look"
+	CommandSlowLook  = "slowlook"
+	CommandWait      = "wait"
+	CommandSpeak     = "speak"
+	CommandHeadShake = "headshake"
+	CommandStop      = "stop"
+
+	// State constants for controlling the behavior of the main loop.
+	StateLooking     = "looking"
+	StateSlowLooking = "slowlooking"
+	StateWaiting     = "waiting"
+	StateSpeaking    = "speaking"
+	StateHeadShaking = "headshaking"
+	StateStopped     = "stopped"
+)
+
+// processCommand parses and dispatches a received serial command.
+func processCommand(cmd string) error {
 	parts := strings.SplitN(strings.TrimSpace(cmd), " ", 2)
 	command := parts[0]
 
 	switch command {
-	case "look", "slowlook":
+	case CommandLook, CommandSlowLook:
 		if len(parts) != 2 {
 			return errAngleRequired
 		}
@@ -32,10 +50,11 @@ func handleCommand(cmd string) error {
 			return errInvalidAngle
 		}
 		targetAngle = a
-		mode = command
-	case "wait", "speak", "headshake", "stop":
-		mode = command
+		mode = stateForCommand(command)
+	case CommandWait, CommandSpeak, CommandHeadShake, CommandStop:
+		mode = stateForCommand(command)
 	default:
+		mode = StateStopped
 		return errUnknownCommand
 	}
 	return nil
@@ -62,4 +81,23 @@ func movement(current, target int) int {
 		return target
 	}
 	return current
+}
+
+func stateForCommand(command string) string {
+	switch command {
+	case CommandLook:
+		return StateLooking
+	case CommandSlowLook:
+		return StateSlowLooking
+	case CommandWait:
+		return StateWaiting
+	case CommandSpeak:
+		return StateSpeaking
+	case CommandHeadShake:
+		return StateHeadShaking
+	case CommandStop:
+		return StateStopped
+	default:
+		return "unknown"
+	}
 }
