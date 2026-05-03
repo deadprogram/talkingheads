@@ -1,4 +1,4 @@
-//go:build !feetech && tinygo
+//go:build tinygo && !(feetech || noservo)
 
 package main
 

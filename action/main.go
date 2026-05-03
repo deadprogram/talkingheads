@@ -57,7 +57,7 @@ func lights() {
 			matrix.Stop()
 		}
 
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(10 * time.Millisecond)
 	}
 }
 
@@ -115,6 +115,6 @@ func action() {
 			angle = 90
 		}
 
-		time.Sleep(200 * time.Millisecond)
+		time.Sleep(20 * time.Millisecond)
 	}
 }
