@@ -6,7 +6,7 @@ replace github.com/deadprogram/talkingheads => ../..
 
 require (
 	github.com/deadprogram/talkingheads v0.0.0-00010101000000-000000000000
-	github.com/hybridgroup/yzma v1.13.1-0.20260430184946-fcf5c5d071b2
+	github.com/hybridgroup/yzma v1.13.1-0.20260503174207-4b69c1696bf4
 	github.com/urfave/cli/v2 v2.27.7
 )
 

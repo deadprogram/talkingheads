@@ -69,7 +69,7 @@ You have access to the following tools:
 %s
 
 Tool calls use this syntax directly in your response alongside your spoken text:
-  call:tool_movement{command:<|"|>look<|"|>angle:90}
+  call:tool_movement{command:<|>look<|>,angle:90}
 
 IMPORTANT rules:
 - Only use the exact tool names and command values listed above. Do not invent commands.
@@ -78,7 +78,7 @@ IMPORTANT rules:
 
 Example of a correct response — spoken text and tool calls in the same turn:
   Hello! I'm doing wonderfully today.
-  call:tool_movement{command:<|"|>look<|"|>angle:45}
+  call:tool_movement{command:<|>look<|>,angle:45}
   I looked to the right just now.
 
 A response with only tool calls and no spoken text is invalid.`, toolsJSON)

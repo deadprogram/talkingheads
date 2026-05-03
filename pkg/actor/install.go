@@ -34,7 +34,7 @@ func EnsureInstall(libPath string, processor string, updateInstall bool) error {
 		}
 
 		fmt.Println("installing llama.cpp version", version, "to", libPath)
-		if err := download.GetWithContext(context.Background(), runtime.GOARCH, runtime.GOOS, processor, version, libPath, download.ProgressTracker); err != nil {
+		if err := download.GetWithContext(context.Background(), runtime.GOARCH, "trixie", processor, version, libPath, download.ProgressTracker); err != nil {
 			fmt.Println("failed to download llama.cpp:", err.Error())
 			return err
 		}
@@ -53,6 +53,7 @@ func EnsureModel(modelUrl string, modelsPath string) error {
 	modelFilePath := filepath.Join(modelsPath, modelName)
 
 	if _, err := os.Stat(modelFilePath); os.IsNotExist(err) {
+		fmt.Println("installing model from", modelUrl, "to", modelFilePath)
 		if err := download.GetModelWithContext(context.Background(), modelUrl, modelsPath, download.ProgressTracker); err != nil {
 			fmt.Println("failed to download model:", err.Error())
 			return err

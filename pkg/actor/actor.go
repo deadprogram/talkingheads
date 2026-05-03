@@ -2,6 +2,7 @@ package actor
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -108,6 +109,13 @@ type Actor struct {
 	// each turn, saving the cost of re-decoding the entire conversation history.
 	nCachedPrompt int
 
+	// nSystemPromptTokens is the number of tokens occupied by the system prompt
+	// alone (rendered via the chat template with no user turns). These tokens are
+	// decoded once during warm-up and never need to be re-decoded as long as the
+	// system prompt doesn't change. When context trimming forces a full KV cache
+	// clear, only the tokens *beyond* this prefix need decoding on the next turn.
+	nSystemPromptTokens int
+
 	moreConversationFunc func(conversation *[]message.Message)
 	outputFunc           func(content string)
 	tools                map[string]Tool
@@ -159,9 +167,28 @@ func NewActor(modelPath string, cfg Config, commander Commander, moreFunc func(c
 
 	vocab := llama.ModelGetVocab(mdl)
 
+	// Resolve the model format first — we need it to pick the right fallback
+	// chat template when the model file carries no tokenizer.chat_template.
+	if cfg.ModelFormat == message.FormatAuto {
+		cfg.ModelFormat = message.DetectFormatFromPath(modelPath)
+	}
+
 	chatTmpl := llama.ModelChatTemplate(mdl, "")
 	if chatTmpl == "" {
-		chatTmpl = "chatml"
+		// No template baked into the model metadata. Fall back to a built-in
+		// template that matches the model family when one is available.
+		var builtinName string
+		switch cfg.ModelFormat {
+		case message.FormatGemma3, message.FormatGemma:
+			builtinName = "gemma3"
+		default:
+			builtinName = "chatml"
+		}
+		if tmplContent, ok := template.BuiltinTemplate(builtinName); ok {
+			chatTmpl = tmplContent
+		} else {
+			chatTmpl = builtinName
+		}
 	}
 
 	sp := llama.DefaultSamplerParams()
@@ -173,11 +200,6 @@ func NewActor(modelPath string, cfg Config, commander Commander, moreFunc func(c
 	sp.PenaltyPresent = cfg.PresencePenalty
 	sp.DryMultiplier = cfg.DryMultiplier
 	smpl := llama.NewSampler(mdl, llama.DefaultSamplers, sp)
-
-	// Auto-detect model format from the model path when not explicitly set.
-	if cfg.ModelFormat == message.FormatAuto {
-		cfg.ModelFormat = message.DetectFormatFromPath(modelPath)
-	}
 
 	toolsMap := make(map[string]Tool)
 	toolDocs := []message.ToolDefinition{
@@ -196,6 +218,132 @@ func NewActor(modelPath string, cfg Config, commander Commander, moreFunc func(c
 		tools:                toolsMap,
 		toolsJSON:            marshalToolDocs(toolDocs),
 	}, nil
+}
+
+// prepareConversationForTemplate preprocesses a conversation before rendering
+// when the model's chat template does not support a dedicated system role
+// (e.g. Gemma3 templates only support "user" and "model" roles). In that case
+// the leading system message content is prepended to the first user message so
+// the model still receives the system instructions. All other formats are
+// returned unchanged.
+func prepareConversationForTemplate(conv []message.Message, format message.Format) []message.Message {
+	if format != message.FormatGemma3 {
+		return conv
+	}
+	if len(conv) == 0 || conv[0].GetRole() != "system" {
+		return conv
+	}
+	sysContent := conv[0].GetContent()["content"].(string)
+	out := make([]message.Message, 0, len(conv))
+	merged := false
+	for _, msg := range conv[1:] {
+		if !merged && msg.GetRole() == "user" {
+			userContent := msg.GetContent()["content"].(string)
+			out = append(out, message.Chat{Role: "user", Content: sysContent + "\n\n" + userContent})
+			merged = true
+		} else {
+			out = append(out, msg)
+		}
+	}
+	if !merged {
+		// No user message to merge into; strip the system message.
+		return conv[1:]
+	}
+	return out
+}
+
+// warmUpSystemPrompt tokenizes the system prompt by itself, decodes it into
+// the KV cache, and records the token count in nSystemPromptTokens /
+// nCachedPrompt. Subsequent turns then start decoding from that offset,
+// skipping the most expensive part of the prompt on every turn.
+// sysContent must be the final system message content (tools already injected).
+func (a *Actor) warmUpSystemPrompt(ctx context.Context, sysContent string) error {
+	// Many chat templates (e.g. Qwen, ChatML) require at least one user message
+	// to render successfully. Use an empty-content user placeholder so the
+	// template is satisfied, then measure how many tokens the system portion
+	// occupies by comparing the full render against a render with a non-empty
+	// user message. The system prefix length is the number of leading tokens
+	// shared by both renders.
+	tmplOpts := template.Options{EnableThinking: a.cfg.EnableThinking}
+
+	renderWith := func(userContent string) (string, error) {
+		conv := []message.Message{
+			message.Chat{Role: "system", Content: sysContent},
+			message.Chat{Role: "user", Content: userContent},
+		}
+		renderConv := prepareConversationForTemplate(conv, a.cfg.ModelFormat)
+		return template.ApplyWithOptions(a.chatTemplate, renderConv, false, tmplOpts)
+	}
+
+	promptEmpty, err := renderWith("")
+	if err != nil {
+		return fmt.Errorf("error applying chat template for warm-up: %w", err)
+	}
+	promptSentinel, err := renderWith("WARMUP_SENTINEL_TOKEN")
+	if err != nil {
+		return fmt.Errorf("error applying chat template for warm-up (sentinel): %w", err)
+	}
+
+	tokensEmpty := llama.Tokenize(a.vocab, promptEmpty, true, true)
+	tokensSentinel := llama.Tokenize(a.vocab, promptSentinel, true, true)
+
+	// Find the longest common prefix between the two tokenisations. Everything
+	// up to that boundary is purely system-prompt tokens.
+	prefixLen := 0
+	for prefixLen < len(tokensEmpty) && prefixLen < len(tokensSentinel) &&
+		tokensEmpty[prefixLen] == tokensSentinel[prefixLen] {
+		prefixLen++
+	}
+	if prefixLen == 0 {
+		// Shouldn't happen, but if the two renders share no prefix something is
+		// wrong with the template. Decode the full empty-user render instead.
+		prefixLen = len(tokensEmpty)
+	}
+
+	tokens := tokensEmpty[:prefixLen]
+
+	if len(tokens) == 0 {
+		return nil
+	}
+
+	mem, err := llama.GetMemory(a.llamaCtx)
+	if err != nil {
+		return fmt.Errorf("error getting memory for warm-up: %w", err)
+	}
+	if clearErr := llama.MemoryClear(mem, true); clearErr != nil {
+		return fmt.Errorf("error clearing memory for warm-up: %w", clearErr)
+	}
+
+	nBatch := int(llama.NBatch(a.llamaCtx))
+	if nBatch <= 0 {
+		nBatch = 512
+	}
+
+	t0 := time.Now()
+	if a.cfg.Verbose {
+		log.Printf("[verbose] warm-up: decoding %d system prompt tokens, batch size %d", len(tokens), nBatch)
+	}
+	for i := 0; i < len(tokens); i += nBatch {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+		end := i + nBatch
+		if end > len(tokens) {
+			end = len(tokens)
+		}
+		if _, err := llama.Decode(a.llamaCtx, llama.BatchGetOne(tokens[i:end])); err != nil {
+			return fmt.Errorf("error decoding system prompt during warm-up: %w", err)
+		}
+	}
+	if a.cfg.Verbose {
+		log.Printf("[verbose] warm-up done: %v", time.Since(t0))
+	}
+
+	a.nSystemPromptTokens = len(tokens)
+	a.nCachedPrompt = len(tokens)
+	return nil
 }
 
 // Close releases model and context resources.
@@ -220,6 +368,15 @@ func (a *Actor) Run(ctx context.Context, systemPrompt string) error {
 	}
 	conversation := []message.Message{
 		message.Chat{Role: "system", Content: sysContent},
+	}
+
+	// Pre-decode the system prompt into the KV cache so the first (and every
+	// subsequent) turn only needs to decode the incremental user/assistant turns.
+	if err := a.warmUpSystemPrompt(ctx, sysContent); err != nil {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		log.Printf("warm-up failed (continuing without pre-cached prompt): %v", err)
 	}
 
 	needMoreInput := true
@@ -331,7 +488,8 @@ func (a *Actor) GetMore(conversation *[]message.Message) bool {
 // exceeds the model's context window.
 func (a *Actor) generateTurn(ctx context.Context, conversation *[]message.Message) (string, bool, []message.ToolCall, error) {
 	tmplOpts := template.Options{EnableThinking: a.cfg.EnableThinking}
-	prompt, err := template.ApplyWithOptions(a.chatTemplate, *conversation, true, tmplOpts)
+	renderConv := prepareConversationForTemplate(*conversation, a.cfg.ModelFormat)
+	prompt, err := template.ApplyWithOptions(a.chatTemplate, renderConv, true, tmplOpts)
 	if err != nil {
 		return "", false, nil, fmt.Errorf("error applying chat template: %w", err)
 	}
@@ -347,7 +505,8 @@ func (a *Actor) generateTurn(ctx context.Context, conversation *[]message.Messag
 			// Drop the second message (oldest non-system entry) and re-tokenize.
 			log.Println("trimming oldest message from conversation to fit context window")
 			*conversation = append((*conversation)[:1], (*conversation)[2:]...)
-			prompt, err = template.ApplyWithOptions(a.chatTemplate, *conversation, true, tmplOpts)
+			renderConv = prepareConversationForTemplate(*conversation, a.cfg.ModelFormat)
+			prompt, err = template.ApplyWithOptions(a.chatTemplate, renderConv, true, tmplOpts)
 			if err != nil {
 				return "", false, nil, fmt.Errorf("error applying chat template after trim: %w", err)
 			}
@@ -363,20 +522,27 @@ func (a *Actor) generateTurn(ctx context.Context, conversation *[]message.Messag
 	// Incremental decode: reuse the cached prompt prefix from the previous turn
 	// and only decode the tokens added since then. This avoids re-decoding the
 	// entire conversation history on every turn (the main source of latency on
-	// slow hardware). When the prompt shrank (context trimming dropped old
-	// messages), the cached prefix is no longer valid — fall back to full clear.
+	// slow hardware).
+	//
+	// Three cases:
+	//   1. New prompt extends the cached prefix — trim only the generated tail
+	//      (nCachedPrompt..∞) and decode the new tokens from nCachedPrompt.
+	//   2. New prompt is shorter (context trimming dropped old messages) but
+	//      still covers the system-prompt prefix — restore from nSystemPromptTokens.
+	//   3. Neither of the above — full KV clear; re-decode from nSystemPromptTokens
+	//      if the system prompt was pre-cached, otherwise from 0.
 	var decodeFrom int
 	t0 := time.Now()
 	if a.nCachedPrompt > 0 && len(tokens) >= a.nCachedPrompt {
-		// Trim the tail of the cache (generated tokens from last turn) so that
-		// positions nCachedPrompt..∞ are freed, keeping the prompt prefix intact.
+		// Case 1: prompt grew — trim the generated tail and decode the delta.
 		if ok, rmErr := llama.MemorySeqRm(mem, 0, llama.Pos(a.nCachedPrompt), -1); ok && rmErr == nil {
 			decodeFrom = a.nCachedPrompt
 			if a.cfg.Verbose {
 				log.Printf("[verbose] cache trim: kept %d cached tokens, removed tail (%v)", a.nCachedPrompt, time.Since(t0))
 			}
 		} else {
-			// MemorySeqRm failed (shouldn't happen): full clear.
+			// MemorySeqRm failed (recurrent/hybrid model): full clear, but
+			// re-use the system-prompt prefix if it was pre-decoded.
 			if clearErr := llama.MemoryClear(mem, true); clearErr != nil {
 				return "", false, nil, fmt.Errorf("error clearing memory: %w", clearErr)
 			}
@@ -385,8 +551,30 @@ func (a *Actor) generateTurn(ctx context.Context, conversation *[]message.Messag
 				log.Printf("[verbose] cache trim failed, full clear (%v)", time.Since(t0))
 			}
 		}
+	} else if a.nCachedPrompt > 0 && a.nSystemPromptTokens > 0 && len(tokens) >= a.nSystemPromptTokens {
+		// Case 2: prompt shrank (context trim dropped messages) but the
+		// system-prompt prefix is still valid. Discard everything after the
+		// system prompt and re-decode from there.
+		if ok, rmErr := llama.MemorySeqRm(mem, 0, llama.Pos(a.nSystemPromptTokens), -1); ok && rmErr == nil {
+			decodeFrom = a.nSystemPromptTokens
+			a.nCachedPrompt = a.nSystemPromptTokens
+			if a.cfg.Verbose {
+				log.Printf("[verbose] cache trim (shrink): restored to system prefix (%d tokens) (%v)", a.nSystemPromptTokens, time.Since(t0))
+			}
+		} else {
+			// MemorySeqRm failed: full clear.
+			if clearErr := llama.MemoryClear(mem, true); clearErr != nil {
+				return "", false, nil, fmt.Errorf("error clearing memory: %w", clearErr)
+			}
+			a.nCachedPrompt = 0
+			if a.cfg.Verbose {
+				log.Printf("[verbose] cache trim failed (shrink), full clear (%v)", time.Since(t0))
+			}
+		}
 	} else {
-		// First turn or prompt shrank due to context trimming: full clear.
+		// Case 3: full clear. If the system prompt was pre-decoded (warm-up ran
+		// successfully) and the new prompt is long enough, restore it into the
+		// cache by decoding only the system-prompt tokens before continuing.
 		if clearErr := llama.MemoryClear(mem, true); clearErr != nil {
 			return "", false, nil, fmt.Errorf("error clearing memory: %w", clearErr)
 		}
@@ -623,6 +811,14 @@ var orphanAngleRE = regexp.MustCompile(`\bangle:\d+\b`)
 // Single-word parentheticals like "(five)" are preserved.
 var stageDirectionRE = regexp.MustCompile(`\([^)]*\s[^)]*\)`)
 
+// jsonResponseRE extracts the string value of a "response" key from a JSON
+// object that may be incomplete (missing closing brace). It matches:
+//
+//	{"response": "value"}
+//	{"response":"value"}   (no space)
+//	{"response": "value"  (no closing brace — truncated generation)
+var jsonResponseRE = regexp.MustCompile(`\{\s*"response"\s*:\s*"((?:[^"]|\\")*)"`)
+
 // stripActorMarkup calls message.StripMarkup and then removes artefacts that
 // are specific to the talkingheads actor (orphaned angle parameters, stage
 // directions). This keeps the yzma library general-purpose.
@@ -630,7 +826,27 @@ func stripActorMarkup(s string) string {
 	s = message.StripMarkup(s)
 	s = orphanAngleRE.ReplaceAllString(s, "")
 	s = stageDirectionRE.ReplaceAllString(s, "")
-	return strings.TrimSpace(s)
+	s = strings.TrimSpace(s)
+	// Some fine-tuned models (e.g. gemma-3-270M-finetune) wrap every reply in
+	// a JSON envelope: {"response": "..."} — possibly without a closing brace
+	// when the model truncates its output before finishing the JSON object.
+	if strings.HasPrefix(s, "{") {
+		// Fast path: complete JSON object with a closing brace.
+		if end := strings.LastIndex(s, "}"); end >= 0 {
+			var env map[string]any
+			if err := json.Unmarshal([]byte(s[:end+1]), &env); err == nil {
+				if resp, ok := env["response"].(string); ok && resp != "" {
+					return strings.TrimSpace(resp)
+				}
+			}
+		}
+		// Fallback: incomplete JSON — extract with a regex so truncated output
+		// like {"response": "text without closing brace is still unwrapped.
+		if m := jsonResponseRE.FindStringSubmatch(s); len(m) == 2 && m[1] != "" {
+			return strings.TrimSpace(m[1])
+		}
+	}
+	return s
 }
 
 // flushSentences calls fn for each complete sentence found in buf (delimited

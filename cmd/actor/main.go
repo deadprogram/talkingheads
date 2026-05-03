@@ -106,6 +106,11 @@ func main() {
 				Usage: "physical maximum micro-batch size (n_ubatch); 0 = use llama.cpp default",
 				Value: int(actor.DefaultUBatchSize),
 			},
+			&cli.StringFlag{
+				Name:  "model-format",
+				Usage: "override the model format used for tool-call grammar (auto, standard, qwen, glm, mistral, gemma3, gemma, gpt, phi); default is auto-detect from model name",
+				Value: "auto",
+			},
 			&cli.BoolFlag{
 				Name:  "inject-tools",
 				Usage: "enable injecting tool definitions into the system prompt (useful for models with native tool-call support)",
@@ -248,6 +253,7 @@ func run(c *cli.Context) error {
 		ContextSize:     uint32(c.Int("context-size")),
 		BatchSize:       uint32(c.Int("batch-size")),
 		UBatchSize:      uint32(c.Int("ubatch-size")),
+		ModelFormat:     parseModelFormat(c.String("model-format")),
 		InjectTools:     c.Bool("inject-tools"),
 		EnableThinking:  c.Bool("enable-thinking"),
 		RepeatPenalty:   float32(c.Float64("repeat-penalty")),
@@ -268,6 +274,32 @@ func run(c *cli.Context) error {
 	}
 
 	return nil
+}
+
+// parseModelFormat converts a format name string to a message.Format value.
+// Returns message.FormatAuto for unknown or empty strings so that
+// auto-detection from the model path is used as the fallback.
+func parseModelFormat(s string) message.Format {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "standard":
+		return message.FormatStandard
+	case "qwen":
+		return message.FormatQwen
+	case "glm":
+		return message.FormatGLM
+	case "mistral":
+		return message.FormatMistral
+	case "gemma3":
+		return message.FormatGemma3
+	case "gemma":
+		return message.FormatGemma
+	case "gpt":
+		return message.FormatGPT
+	case "phi":
+		return message.FormatPhi
+	default:
+		return message.FormatAuto
+	}
 }
 
 // buildSystemPrompt reads each file in paths and concatenates their contents,
