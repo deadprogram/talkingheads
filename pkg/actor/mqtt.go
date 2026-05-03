@@ -2,7 +2,6 @@ package actor
 
 import (
 	"encoding/json"
-	"fmt"
 	"log"
 	"regexp"
 	"sync"
@@ -19,6 +18,7 @@ import (
 // which is compatible with the speak/# subscription in pkg/dialogue.
 type MQTTListener struct {
 	name      string
+	commander Commander
 	client    mqtt.Client
 	incoming  chan string
 	done      chan struct{}
@@ -27,8 +27,11 @@ type MQTTListener struct {
 
 // NewMQTTListener connects to the broker, subscribes to "ask/<name>" for
 // direct prompts and "speak/#" to hear other actors, and returns a
-// ready-to-use MQTTListener.
-func NewMQTTListener(name, server string) (*MQTTListener, error) {
+// ready-to-use MQTTListener. If commander is nil, a LogCommander is used.
+func NewMQTTListener(name, server string, commander Commander) (*MQTTListener, error) {
+	if commander == nil {
+		commander = &LogCommander{}
+	}
 	options := mqtt.NewClientOptions()
 	options.AddBroker(server)
 	options.SetClientID("actor-" + name)
@@ -42,10 +45,11 @@ func NewMQTTListener(name, server string) (*MQTTListener, error) {
 	}
 
 	l := &MQTTListener{
-		name:     name,
-		client:   client,
-		incoming: make(chan string, 5),
-		done:     make(chan struct{}),
+		name:      name,
+		commander: commander,
+		client:    client,
+		incoming:  make(chan string, 5),
+		done:      make(chan struct{}),
 	}
 
 	askTopic := "ask/" + name
@@ -92,9 +96,13 @@ func (l *MQTTListener) handleSpeakingStatus(_ mqtt.Client, msg mqtt.Message) {
 	}
 	switch s.Status {
 	case commands.StatusSpeaking:
-		fmt.Println("now speaking")
+		if err := l.commander.Send("speak"); err != nil {
+			log.Printf("failed to send speak command: %v\n", err)
+		}
 	case commands.StatusStopped:
-		fmt.Println("stopped speaking")
+		if err := l.commander.Send("stop"); err != nil {
+			log.Printf("failed to send stop command: %v\n", err)
+		}
 	}
 }
 

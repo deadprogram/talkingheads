@@ -193,11 +193,22 @@ func run(c *cli.Context) error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
+	var commander actor.Commander
+	if serialPort != "" {
+		sc, err := actor.NewSerialCommander(serialPort, baudRate)
+		if err != nil {
+			return cli.Exit(fmt.Sprintf("failed to open serial port: %v", err), 1)
+		}
+		defer sc.Close()
+		commander = sc
+		log.Printf("Serial mode: sending action commands to %s at %d baud\n", serialPort, baudRate)
+	}
+
 	var moreFunc func(*[]message.Message)
 	var outputFunc func(string)
 
 	if server != "" {
-		ml, err := actor.NewMQTTListener(name, server)
+		ml, err := actor.NewMQTTListener(name, server, commander)
 		if err != nil {
 			return cli.Exit(fmt.Sprintf("failed to connect to MQTT broker: %v", err), 1)
 		}
@@ -232,17 +243,6 @@ func run(c *cli.Context) error {
 	systemPrompt, err := buildSystemPrompt(scriptFiles)
 	if err != nil {
 		return cli.Exit(fmt.Sprintf("failed to load script: %v", err), 1)
-	}
-
-	var commander actor.Commander
-	if serialPort != "" {
-		sc, err := actor.NewSerialCommander(serialPort, baudRate)
-		if err != nil {
-			return cli.Exit(fmt.Sprintf("failed to open serial port: %v", err), 1)
-		}
-		defer sc.Close()
-		commander = sc
-		log.Printf("Serial mode: sending action commands to %s at %d baud\n", serialPort, baudRate)
 	}
 
 	a, err := actor.NewActor(modelPath, actor.Config{
