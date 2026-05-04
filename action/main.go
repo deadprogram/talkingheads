@@ -36,7 +36,7 @@ func main() {
 				input = append(input, data)
 			}
 		}
-		time.Sleep(10 * time.Millisecond)
+		time.Sleep(5 * time.Millisecond)
 	}
 }
 
@@ -57,7 +57,7 @@ func lights() {
 			matrix.Stop()
 		}
 
-		time.Sleep(10 * time.Millisecond)
+		time.Sleep(5 * time.Millisecond)
 	}
 }
 
@@ -115,6 +115,6 @@ func action() {
 			angle = 90
 		}
 
-		time.Sleep(20 * time.Millisecond)
+		time.Sleep(10 * time.Millisecond)
 	}
 }
