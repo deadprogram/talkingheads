@@ -25,11 +25,30 @@ LOCAL_FILE="$OUTPUT_PATH"
 FILE_NAME=$(basename "$LOCAL_FILE")
 TARGET_FILE_PATH="/home/arduino/$FILE_NAME"
 
-# 2. Upload the file
+# 2. Upload the Actor file
 echo "Uploading program '$FILE_NAME'..."
 if ! scp $ALLOW_SSH_AUTH_WITH_PASSWORD "$LOCAL_FILE" "$TARGET:$TARGET_FILE_PATH"; then
     echo "Error: Failed to upload $LOCAL_FILE"
     exit 1
+fi
+
+# 3. Upload the scripts for the Actor.
+echo "Uploading scripts for program '$FILE_NAME'..."
+SCRIPT_DIR="$(dirname "$SOURCE_PATH")/scripts"
+if [ -d "$SCRIPT_DIR" ]; then
+    for script in "$SCRIPT_DIR"/*.md; do
+        if [ -f "$script" ]; then
+            SCRIPT_NAME=$(basename "$script")
+            TARGET_SCRIPT_PATH="/home/arduino/scripts/$SCRIPT_NAME"
+            echo "Uploading script '$SCRIPT_NAME'..."
+            if ! scp $ALLOW_SSH_AUTH_WITH_PASSWORD "$script" "$TARGET:$TARGET_SCRIPT_PATH"; then
+                echo "Error: Failed to upload $script"
+                exit 1
+            fi
+        fi
+    done
+else
+    echo "No scripts directory found at $SCRIPT_DIR, skipping script upload."
 fi
 
 echo "Done!"
