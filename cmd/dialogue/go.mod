@@ -32,7 +32,7 @@ require (
 	github.com/googleapis/enterprise-certificate-proxy v0.3.15 // indirect
 	github.com/googleapis/gax-go/v2 v2.22.0 // indirect
 	github.com/gorilla/websocket v1.5.3 // indirect
-	github.com/hybridgroup/go-sayanything v0.0.0-20260501131253-2ac14ca5d1e4 // indirect
+	github.com/hybridgroup/go-sayanything v0.0.0-20260504182014-9633f2a84d04 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/tosone/minimp3 v1.0.1 // indirect
 	github.com/xrash/smetrics v0.0.0-20201216005158-039620a65673 // indirect

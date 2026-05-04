@@ -135,8 +135,8 @@ github.com/hashicorp/go-getter v1.8.6 h1:9sQboWULaydVphxc4S64oAI4YqpuCk7nPmvbk13
 github.com/hashicorp/go-getter v1.8.6/go.mod h1:nVH12eOV2P58dIiL3rsU6Fh3wLeJEKBOJzhMmzlSWoo=
 github.com/hashicorp/go-version v1.9.0 h1:CeOIz6k+LoN3qX9Z0tyQrPtiB1DFYRPfCIBtaXPSCnA=
 github.com/hashicorp/go-version v1.9.0/go.mod h1:fltr4n8CU8Ke44wwGCBoEymUuxUHl09ZGVZPK5anwXA=
-github.com/hybridgroup/go-sayanything v0.0.0-20260501131253-2ac14ca5d1e4 h1:gH4TAupp024tL+HEGs7iwuZqbYEngLKfp4ZdcMg5xhY=
-github.com/hybridgroup/go-sayanything v0.0.0-20260501131253-2ac14ca5d1e4/go.mod h1:p4g4I8AwvL+QmkclErYWvc39wZYclpQZNyZotwSPIuQ=
+github.com/hybridgroup/go-sayanything v0.0.0-20260504182014-9633f2a84d04 h1:jyFytTND6WeTgZjasfTk0PR2J8d9uXCYnpsAv9i7bwI=
+github.com/hybridgroup/go-sayanything v0.0.0-20260504182014-9633f2a84d04/go.mod h1:p4g4I8AwvL+QmkclErYWvc39wZYclpQZNyZotwSPIuQ=
 github.com/hybridgroup/yzma v1.13.1-0.20260503174207-4b69c1696bf4 h1:I0abbCkPFHqWnm7qp22A0VoY+quRMZd0WC75uyHiKVI=
 github.com/hybridgroup/yzma v1.13.1-0.20260503174207-4b69c1696bf4/go.mod h1:DAsHYcX7ze7iFZH6PT57oCuqaVd/AXdALhjnOSgWbaE=
 github.com/jupiterrider/ffi v0.6.0 h1:UX378KcZvH5c8qgLi9KL/bL82SZTHdRspZ+jj7bvBng=

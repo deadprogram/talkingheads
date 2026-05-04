@@ -6,7 +6,7 @@ require (
 	github.com/eclipse/paho.mqtt.golang v1.4.3
 	github.com/ggerganov/whisper.cpp/bindings/go v0.0.0-20260420051257-fc674574ca27
 	github.com/gordonklaus/portaudio v0.0.0-20260203164431-765aa7dfa631
-	github.com/hybridgroup/go-sayanything v0.0.0-20260501131253-2ac14ca5d1e4
+	github.com/hybridgroup/go-sayanything v0.0.0-20260504182014-9633f2a84d04
 	github.com/hybridgroup/yzma v1.13.1-0.20260503174207-4b69c1696bf4
 	go.bug.st/serial v1.6.4
 	golang.org/x/term v0.42.0
