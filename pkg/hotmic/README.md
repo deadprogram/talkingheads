@@ -33,6 +33,8 @@ brew install portaudio
 
 The Go module uses a `replace` directive pointing at a local whisper.cpp checkout because the published module does not bundle the required C libraries. You need to build `libwhisper.a` yourself:
 
+To build with CPU-only support:
+
 ```sh
 git submodule update --init lib/whisper.cpp
 cd lib/whisper.cpp
@@ -42,6 +44,18 @@ cmake --build build --config Release -j$(nproc)
 cp build/src/libwhisper.a .
 cp build/ggml/src/libggml.a .
 ```
+
+To build with CUDA support:
+
+```sh
+git submodule update --init lib/whisper.cpp
+cd lib/whisper.cpp
+cmake -B build -DBUILD_SHARED_LIBS=OFF -DGGML_OPENMP=OFF -DWHISPER_BUILD_TESTS=OFF -DWHISPER_BUILD_EXAMPLES=OFF -DGGML_CUDA=1 -DCMAKE_CUDA_ARCHITECTURES="86;89" -DCMAKE_DISABLE_FIND_PACKAGE_NCCL=ON -DGGML_BACKEND_DL=ON
+cmake --build build --config Release -j$(nproc)
+# The resulting static libraries are written to the repo root:
+cp build/src/libwhisper.a .
+cp build/ggml/src/libggml.a .
+
 
 > **Note:** The `go.mod` files in this repository have a `replace` directive that maps
 > `github.com/ggerganov/whisper.cpp/bindings/go` to the submodule:
@@ -93,6 +107,17 @@ C_INCLUDE_PATH=$WHISPER_DIR/include:$WHISPER_DIR/ggml/include \
 LIBRARY_PATH=$WHISPER_DIR \
 CGO_LDFLAGS="-L$WHISPER_DIR -lwhisper -lggml -lm -lstdc++" \
 go build ./pkg/hotmic/...
+```
+
+### CUDA
+
+```sh
+export WHISPER_DIR=$$(git rev-parse --show-toplevel)/lib/whisper.cpp
+export CUDA_DIR=/usr/local/cuda-13
+export C_INCLUDE_PATH=$${WHISPER_DIR}/include:$${WHISPER_DIR}/ggml/include
+export LD_LIBRARY_PATH=$${LD_LIBRARY_PATH}:$${WHISPER_DIR}:$${CUDA_DIR}/lib64
+export CGO_LDFLAGS="-L$${WHISPER_DIR} -lwhisper -lggml -lm -lstdc++ -L$${CUDA_DIR}/lib64 -lcudart -lcublas -lcuda"
+cd cmd/director && go build -o ../../build/director
 ```
 
 ## Usage
