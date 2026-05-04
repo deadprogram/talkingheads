@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/hybridgroup/yzma/pkg/message"
 )
@@ -116,4 +117,14 @@ When you need to use a tool, respond with a tool call in the following format:
 {"name": "function_name", "arguments": {"arg1": "value1"}}
 </tool_call>
 After receiving tool results, continue your response normally.`, toolsJSON)
+}
+
+// normalizeToolName returns a lowercase version of name with underscores and
+// hyphens removed, used as a fallback key when a model elides punctuation from
+// tool names (e.g. Gemma 4 outputs "toolmovement" for "tool_movement").
+func normalizeToolName(name string) string {
+	name = strings.ToLower(name)
+	name = strings.ReplaceAll(name, "_", "")
+	name = strings.ReplaceAll(name, "-", "")
+	return name
 }

@@ -141,6 +141,11 @@ func main() {
 				Usage: "DRY repetition penalty multiplier (0.0 = disabled; try 0.8 to curb looping)",
 				Value: float64(actor.DefaultDryMultiplier),
 			},
+			&cli.IntFlag{
+				Name:  "pause-interval",
+				Usage: "seconds between repeated pause words while waiting for the model's first token (0 = use default)",
+				Value: actor.DefaultPauseInterval,
+			},
 			&cli.BoolFlag{
 				Name:  "verbose",
 				Usage: "enable verbose logging for debugging",
@@ -245,23 +250,25 @@ func run(c *cli.Context) error {
 		return cli.Exit(fmt.Sprintf("failed to load script: %v", err), 1)
 	}
 
-	a, err := actor.NewActor(modelPath, actor.Config{
-		Temperature:     float32(c.Float64("temperature")),
-		TopP:            float32(c.Float64("top-p")),
-		TopK:            int32(c.Int("top-k")),
-		MaxTokens:       c.Int("max-tokens"),
-		ContextSize:     uint32(c.Int("context-size")),
-		BatchSize:       uint32(c.Int("batch-size")),
-		UBatchSize:      uint32(c.Int("ubatch-size")),
-		ModelFormat:     parseModelFormat(c.String("model-format")),
-		InjectTools:     c.Bool("inject-tools"),
-		EnableThinking:  c.Bool("enable-thinking"),
-		RepeatPenalty:   float32(c.Float64("repeat-penalty")),
-		FreqPenalty:     float32(c.Float64("freq-penalty")),
-		PresencePenalty: float32(c.Float64("presence-penalty")),
-		DryMultiplier:   float32(c.Float64("dry-multiplier")),
-		Verbose:         verbose,
-	}, commander, moreFunc, outputFunc)
+	cfg := actor.DefaultConfig()
+	cfg.Temperature = float32(c.Float64("temperature"))
+	cfg.TopP = float32(c.Float64("top-p"))
+	cfg.TopK = int32(c.Int("top-k"))
+	cfg.MaxTokens = c.Int("max-tokens")
+	cfg.ContextSize = uint32(c.Int("context-size"))
+	cfg.BatchSize = uint32(c.Int("batch-size"))
+	cfg.UBatchSize = uint32(c.Int("ubatch-size"))
+	cfg.ModelFormat = parseModelFormat(c.String("model-format"))
+	cfg.InjectTools = c.Bool("inject-tools")
+	cfg.EnableThinking = c.Bool("enable-thinking")
+	cfg.RepeatPenalty = float32(c.Float64("repeat-penalty"))
+	cfg.FreqPenalty = float32(c.Float64("freq-penalty"))
+	cfg.PresencePenalty = float32(c.Float64("presence-penalty"))
+	cfg.DryMultiplier = float32(c.Float64("dry-multiplier"))
+	cfg.PauseInterval = c.Int("pause-interval")
+	cfg.Verbose = verbose
+
+	a, err := actor.NewActor(modelPath, cfg, commander, moreFunc, outputFunc)
 	if err != nil {
 		return cli.Exit(fmt.Sprintf("failed to create actor: %v", err), 1)
 	}

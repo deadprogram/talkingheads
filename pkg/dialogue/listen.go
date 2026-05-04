@@ -15,6 +15,12 @@ type Listener struct {
 	whatWasSaid chan commands.Speak
 	voices      map[string]*Voice
 	verbose     bool
+	publishCh   chan publishMsg
+}
+
+type publishMsg struct {
+	topic   string
+	payload []byte
 }
 
 // NewListener starts the MQTT client and subscribes to the topic for something that was said.
@@ -42,7 +48,21 @@ func NewListener(name, server string, voices map[string]*Voice, verbose bool) (*
 		whatWasSaid: make(chan commands.Speak, 5),
 		voices:      voices,
 		verbose:     verbose,
+		publishCh:   make(chan publishMsg, 32),
 	}
+
+	// Single publisher goroutine: drains publishCh in FIFO order so that
+	// StatusStopped is always delivered before the next StatusSpeaking,
+	// regardless of how quickly back-to-back phrases are queued.
+	go func() {
+		for msg := range m.publishCh {
+			token := m.client.Publish(msg.topic, 0, false, msg.payload)
+			token.Wait()
+			if token.Error() != nil {
+				log.Printf("Failed to publish speaking message to %s: %v\n", msg.topic, token.Error())
+			}
+		}
+	}()
 
 	speakTopic := "speak/#"
 	token = client.Subscribe(speakTopic, 0, m.handleSpeaking)
@@ -108,17 +128,23 @@ func (m *Listener) publishSpeaking(who, status string) {
 		log.Printf("Failed to marshal speaking message: %v\n", err)
 		return
 	}
-	topic := "speaking/" + who
-	token := m.client.Publish(topic, 0, false, payload)
+	msg := publishMsg{topic: "speaking/" + who, payload: payload}
+	if m.publishCh != nil {
+		m.publishCh <- msg
+		return
+	}
+	// publishCh is nil (e.g. bare struct literal in tests): publish synchronously.
+	token := m.client.Publish(msg.topic, 0, false, msg.payload)
 	token.Wait()
 	if token.Error() != nil {
-		log.Printf("Failed to publish speaking message to %s: %v\n", topic, token.Error())
+		log.Printf("Failed to publish speaking message to %s: %v\n", msg.topic, token.Error())
 	}
 }
 
 // Close closes the whatWasSaid channel and all the Voices.
 func (l *Listener) Close() {
 	close(l.whatWasSaid)
+	close(l.publishCh)
 	for _, voice := range l.voices {
 		voice.t.Close()
 		voice.p.Close()

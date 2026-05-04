@@ -48,7 +48,7 @@ func NewMQTTListener(name, server string, commander Commander) (*MQTTListener, e
 		name:      name,
 		commander: commander,
 		client:    client,
-		incoming:  make(chan string, 5),
+		incoming:  make(chan string, 32),
 		done:      make(chan struct{}),
 	}
 
@@ -178,11 +178,13 @@ func (l *MQTTListener) OutputFunc() func(string) {
 		}
 
 		topic := "speak/" + l.name
-		token := l.client.Publish(topic, 0, false, payload)
-		token.Wait()
-		if token.Error() != nil {
-			log.Printf("failed to publish response to %s: %v\n", topic, token.Error())
-		}
+		go func() {
+			token := l.client.Publish(topic, 0, false, payload)
+			token.Wait()
+			if token.Error() != nil {
+				log.Printf("failed to publish response to %s: %v\n", topic, token.Error())
+			}
+		}()
 	}
 }
 

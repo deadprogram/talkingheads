@@ -5,94 +5,17 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math/rand"
 	"os"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/hybridgroup/yzma/pkg/llama"
 	"github.com/hybridgroup/yzma/pkg/message"
 	"github.com/hybridgroup/yzma/pkg/template"
 )
-
-const (
-	DefaultTemperature     = float32(0.6)
-	DefaultTopP            = float32(0.95)
-	DefaultTopK            = int32(20)
-	DefaultMaxTokens       = 2048
-	DefaultContextSize     = 4096
-	DefaultRepeatPenalty   = float32(1.0) // 1.0 = disabled
-	DefaultFreqPenalty     = float32(0.0) // 0.0 = disabled
-	DefaultPresencePenalty = float32(0.0) // 0.0 = disabled
-	DefaultDryMultiplier   = float32(0.0) // 0.0 = disabled
-	DefaultBatchSize       = uint32(0)    // 0 = use llama.cpp default
-	DefaultUBatchSize      = uint32(0)    // 0 = use llama.cpp default
-)
-
-// Config holds the tunable parameters for an Actor.
-type Config struct {
-	Temperature float32
-	TopP        float32
-	TopK        int32
-	MaxTokens   int
-	ContextSize uint32
-	// BatchSize is the logical maximum batch size (n_batch). 0 = use llama.cpp default.
-	BatchSize uint32
-	// UBatchSize is the physical maximum micro-batch size (n_ubatch). 0 = use llama.cpp default.
-	UBatchSize uint32
-	// RepeatPenalty penalises recently-seen tokens to reduce repetition.
-	// 1.0 = disabled; values around 1.1–1.3 are effective for verbose models.
-	RepeatPenalty float32
-	// FreqPenalty penalises tokens proportional to how often they have appeared.
-	// 0.0 = disabled.
-	FreqPenalty float32
-	// PresencePenalty penalises any token that has appeared at all.
-	// 0.0 = disabled.
-	PresencePenalty float32
-	// DryMultiplier enables DRY (Don't Repeat Yourself) repetition penalty.
-	// 0.0 = disabled; values around 0.8 are a good starting point.
-	DryMultiplier float32
-	// ModelFormat controls which tool-call grammar instructions are injected
-	// into the system prompt. Leave as message.FormatAuto (zero value) to
-	// auto-detect from the model path.
-	ModelFormat message.Format
-	// InjectTools controls whether tool definitions and usage instructions are
-	// appended to the system prompt. Defaults to true. Set to false for models
-	// that have native tool-call support baked into their chat template.
-	InjectTools bool
-	// EnableThinking controls whether thinking/reasoning mode is enabled for
-	// models that support it (e.g. Qwen3). When false the model is instructed
-	// to skip chain-of-thought reasoning and respond directly. Defaults to
-	// false to avoid spoken thinking content being published via MQTT.
-	EnableThinking bool
-	// UseMmap controls whether the model file is loaded via mmap.
-	// Defaults to true. Set to false to disable mmap (e.g. when loading from
-	// a network filesystem that does not support mmap).
-	UseMmap bool
-	// Verbose enables verbose logging for debugging.
-	Verbose bool
-}
-
-// DefaultConfig returns a Config populated with sensible defaults.
-func DefaultConfig() Config {
-	return Config{
-		Temperature:     DefaultTemperature,
-		TopP:            DefaultTopP,
-		TopK:            DefaultTopK,
-		MaxTokens:       DefaultMaxTokens,
-		ContextSize:     DefaultContextSize,
-		BatchSize:       DefaultBatchSize,
-		UBatchSize:      DefaultUBatchSize,
-		RepeatPenalty:   DefaultRepeatPenalty,
-		FreqPenalty:     DefaultFreqPenalty,
-		PresencePenalty: DefaultPresencePenalty,
-		DryMultiplier:   DefaultDryMultiplier,
-		InjectTools:     true,
-		EnableThinking:  false,
-		UseMmap:         true,
-		Verbose:         false,
-	}
-}
 
 // Actor drives a conversation using a local llama.cpp model loaded via yzma.
 type Actor struct {
@@ -383,7 +306,30 @@ func (a *Actor) Run(ctx context.Context, systemPrompt string) error {
 	consecutiveToolOnlyTurns := 0
 	const maxConsecutiveToolOnlyTurns = 2
 
+	// Pause-word deck: persists across turns so every word is used once before
+	// any word repeats. A mutex guards deck/pos since the goroutine from the
+	// previous turn may still be exiting when the next one starts.
+	var pauseMu sync.Mutex
+	pauseDeck := make([]int, len(a.cfg.PauseWords))
+	for i := range pauseDeck {
+		pauseDeck[i] = i
+	}
+	rand.Shuffle(len(pauseDeck), func(i, j int) { pauseDeck[i], pauseDeck[j] = pauseDeck[j], pauseDeck[i] })
+	pausePos := 0
+	nextPauseWord := func() string {
+		pauseMu.Lock()
+		defer pauseMu.Unlock()
+		if pausePos >= len(pauseDeck) {
+			rand.Shuffle(len(pauseDeck), func(i, j int) { pauseDeck[i], pauseDeck[j] = pauseDeck[j], pauseDeck[i] })
+			pausePos = 0
+		}
+		w := a.cfg.PauseWords[pauseDeck[pausePos]]
+		pausePos++
+		return w
+	}
+
 	for {
+		var pauseDone chan struct{}
 		if needMoreInput {
 			consecutiveToolOnlyTurns = 0
 			before := len(conversation)
@@ -400,9 +346,34 @@ func (a *Actor) Run(ctx context.Context, systemPrompt string) error {
 					continue
 				}
 			}
+
+			if len(a.cfg.PauseWords) > 0 && a.outputFunc != nil {
+				pauseDone = make(chan struct{})
+				go func() {
+					maxInterval := a.cfg.PauseInterval
+					if maxInterval <= 0 {
+						maxInterval = DefaultPauseInterval
+					}
+					// half of maxInterval in milliseconds, used as the random base
+					halfMs := int64(maxInterval) * 500
+
+					for {
+						jitter := time.Duration(halfMs+rand.Int63n(halfMs+1)) * time.Millisecond
+						select {
+						case <-time.After(jitter):
+							a.outputFunc(nextPauseWord())
+						case <-pauseDone:
+							return
+						}
+					}
+				}()
+			}
 		}
 
 		content, hadText, toolCalls, err := a.generateTurn(ctx, &conversation)
+		if pauseDone != nil {
+			close(pauseDone)
+		}
 		if err != nil {
 			return err
 		}
@@ -782,16 +753,6 @@ func (a *Actor) callTools(ctx context.Context, toolCalls []message.ToolCall) []m
 	}
 
 	return resps
-}
-
-// normalizeToolName returns a lowercase version of name with underscores and
-// hyphens removed, used as a fallback key when a model elides punctuation from
-// tool names (e.g. Gemma 4 outputs "toolmovement" for "tool_movement").
-func normalizeToolName(name string) string {
-	name = strings.ToLower(name)
-	name = strings.ReplaceAll(name, "_", "")
-	name = strings.ReplaceAll(name, "-", "")
-	return name
 }
 
 // templateSupportsToolMessages reports whether the model's chat template
