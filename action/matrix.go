@@ -14,14 +14,11 @@ import (
 
 var on = color.RGBA{255, 255, 255, 255}
 
-const minOffDuration = 300 * time.Millisecond
-
 // Matrix represents the Arduino UNO Q LED matrix display.
 type Matrix struct {
 	unoqmatrix.Device
-	running  bool
-	stop     chan struct{}
-	lastStop time.Time
+	running bool
+	stop    chan struct{}
 }
 
 // NewMatrix initializes the Arduino UNO Q LED matrix display.
@@ -33,13 +30,8 @@ func NewMatrix() *Matrix {
 }
 
 // Start begins the animation on the Arduino UNO Q LED matrix display.
-// If the matrix was recently stopped it will not restart until minOffDuration
-// has elapsed, ensuring a visible gap between consecutive animations.
 func (m *Matrix) Start() {
 	if m.running {
-		return
-	}
-	if time.Since(m.lastStop) < minOffDuration {
 		return
 	}
 	m.running = true
@@ -53,7 +45,6 @@ func (m *Matrix) Stop() {
 		return
 	}
 	m.running = false
-	m.lastStop = time.Now()
 	m.stop <- struct{}{}
 	time.Sleep(5 * time.Millisecond) // Give the draw goroutine time to exit before we clear the display.
 	m.ClearDisplay()

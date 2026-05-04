@@ -57,7 +57,7 @@ func lights() {
 			matrix.Stop()
 		}
 
-		time.Sleep(5 * time.Millisecond)
+		time.Sleep(10 * time.Millisecond)
 	}
 }
 
