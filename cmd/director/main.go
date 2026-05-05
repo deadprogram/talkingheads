@@ -12,6 +12,8 @@ import (
 
 var version = "dev"
 
+var actors = []string{"llama3000", "phineas", "gemmai", "qwentin"}
+
 func main() {
 	RunCLI(version)
 }

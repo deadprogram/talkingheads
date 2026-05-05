@@ -10,8 +10,6 @@ import (
 	"time"
 )
 
-var panelists = []string{"llama3000", "phineas", "gemmai", "qwentin"}
-
 func startKeyboardInput(questions chan question) error {
 	displayQuestion()
 
@@ -30,11 +28,11 @@ func startKeyboardInput(questions chan question) error {
 		to = strings.ToLower(to)
 
 		switch {
-		case slices.Contains(panelists, to):
+		case slices.Contains(actors, to):
 			query = strings.TrimPrefix(text, first)
 			displayQuestion()
 		default:
-			fmt.Println("unknown panelist. try again:", panelists)
+			fmt.Println("unknown actor. try again:", actors)
 			continue
 		}
 
@@ -49,5 +47,5 @@ func startKeyboardInput(questions chan question) error {
 }
 
 func displayQuestion() {
-	fmt.Printf("Enter a question for a panelist %v:\n", panelists)
+	fmt.Printf("Enter a question for an actor %v:\n", actors)
 }

@@ -25,27 +25,27 @@ func startHotMicInput(ctx context.Context, questions chan question, modelPath, l
 	}
 
 	// \r\n required: terminal is in raw mode at this point.
-	fmt.Printf("hotmic ready — press the toggle key to record, speak \"<panelist>: <question>\", press again to transcribe\r\n")
+	fmt.Printf("hotmic ready — press the toggle key to record, speak \"<actor>: <question>\", press again to transcribe\r\n")
 
 	for text := range texts {
 		if text == "" {
 			continue
 		}
 
-		// Split on the first punctuation that separates the panelist name from
+		// Split on the first punctuation that separates the actor name from
 		// the question body. Whisper may transcribe the separator as ':', ',',
 		// '?', or '.'.
 		idx := strings.IndexAny(text, ":,?.")
 		if idx < 0 {
-			fmt.Printf("\rhotmic: no panelist separator in %q\r\n", text)
+			fmt.Printf("\rhotmic: no actor separator in %q\r\n", text)
 			continue
 		}
 		nameRaw := strings.TrimSpace(text[:idx])
 		content := strings.TrimSpace(text[idx+1:])
 
-		to, ok := matchPanelist(nameRaw)
+		to, ok := matchActor(nameRaw)
 		if !ok {
-			fmt.Printf("\rhotmic: unknown panelist %q in %q — expected one of %v\r\n", nameRaw, text, panelists)
+			fmt.Printf("\rhotmic: unknown actor %q in %q — expected one of %v\r\n", nameRaw, text, actors)
 			continue
 		}
 
@@ -61,32 +61,32 @@ func startHotMicInput(ctx context.Context, questions chan question, modelPath, l
 	return nil
 }
 
-// matchPanelist finds the panelist whose name best matches spoken.
+// matchActor finds the actor whose name best matches spoken.
 // It normalises both sides (lowercase, alphanumeric only) and applies three
 // strategies in order:
 //  1. Exact match after normalisation.
 //  2. Substring containment (handles e.g. "lama" → "llama3000").
-//  3. Fuzzy edit-distance: accept the closest panelist when the Levenshtein
+//  3. Fuzzy edit-distance: accept the closest actor when the Levenshtein
 //     distance is ≤ 60 % of the longer normalised name (handles transcription
 //     errors like "lamma3000"→"llama3000" or "jamai"→"gemmai").
-func matchPanelist(spoken string) (string, bool) {
+func matchActor(spoken string) (string, bool) {
 	norm := normalise(spoken)
 	// 1. Exact match after normalisation.
-	for _, p := range panelists {
+	for _, p := range actors {
 		if normalise(p) == norm {
 			return p, true
 		}
 	}
 	// 2. Substring fallback.
-	for _, p := range panelists {
+	for _, p := range actors {
 		np := normalise(p)
 		if strings.Contains(np, norm) || strings.Contains(norm, np) {
 			return p, true
 		}
 	}
-	// 3. Fuzzy fallback: pick the panelist with the smallest edit distance.
+	// 3. Fuzzy fallback: pick the actor with the smallest edit distance.
 	best, bestDist := "", int(^uint(0)>>1)
-	for _, p := range panelists {
+	for _, p := range actors {
 		if d := levenshtein(norm, normalise(p)); d < bestDist {
 			bestDist = d
 			best = p
