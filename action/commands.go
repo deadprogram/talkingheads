@@ -4,11 +4,13 @@ import (
 	"math/rand"
 	"strconv"
 	"strings"
+	"sync"
 )
 
 var (
-	input = make([]byte, 0, 64)
-	mode  = StateStopped
+	input  = make([]byte, 0, 64)
+	mode   = StateStopped
+	modeMu sync.RWMutex
 
 	head        *HeadLED
 	matrix      *Matrix
@@ -50,14 +52,26 @@ func processCommand(cmd string) error {
 			return errInvalidAngle
 		}
 		targetAngle = a
-		mode = stateForCommand(command)
+		setMode(stateForCommand(command))
 	case CommandWait, CommandSpeak, CommandHeadShake, CommandStop:
-		mode = stateForCommand(command)
+		setMode(stateForCommand(command))
 	default:
-		mode = StateStopped
+		setMode(StateStopped)
 		return errUnknownCommand
 	}
 	return nil
+}
+
+func getMode() string {
+	modeMu.RLock()
+	defer modeMu.RUnlock()
+	return mode
+}
+
+func setMode(m string) {
+	modeMu.Lock()
+	defer modeMu.Unlock()
+	mode = m
 }
 
 // Returns an int >= min, < max

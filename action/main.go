@@ -42,7 +42,7 @@ func main() {
 
 func lights() {
 	for {
-		switch mode {
+		switch getMode() {
 		case StateSpeaking:
 			head.Alternate(green, blue)
 			matrix.Start()
@@ -67,17 +67,17 @@ func action() {
 	var waitCounter, speakCounter int
 
 	for {
-		switch mode {
+		switch getMode() {
 		case StateLooking:
 			svo.SetAngle(targetAngle)
 			angle = targetAngle
-			mode = StateStopped
+			setMode(StateStopped)
 
 		case StateSlowLooking:
 			angle = movement(angle, targetAngle)
 			svo.SetAngle(angle)
 			if angle == targetAngle {
-				mode = StateStopped
+				setMode(StateStopped)
 			}
 
 		case StateWaiting:
@@ -108,7 +108,7 @@ func action() {
 			}
 			svo.SetAngle(90)
 			angle = 90
-			mode = StateStopped
+			setMode(StateStopped)
 
 		case StateStopped:
 			svo.SetAngle(90)

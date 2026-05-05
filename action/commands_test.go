@@ -4,7 +4,7 @@ import "testing"
 
 // resetState resets the global command state before each test.
 func resetState() {
-	mode = StateStopped
+	setMode(StateStopped)
 	targetAngle = 90
 }
 
@@ -13,8 +13,8 @@ func TestProcessCommand_Look(t *testing.T) {
 	if err := processCommand("look 135"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if mode != StateLooking {
-		t.Errorf("mode = %q, want %q", mode, StateLooking)
+	if getMode() != StateLooking {
+		t.Errorf("mode = %q, want %q", getMode(), StateLooking)
 	}
 	if targetAngle != 135 {
 		t.Errorf("targetAngle = %d, want 135", targetAngle)
@@ -40,8 +40,8 @@ func TestProcessCommand_SlowLook(t *testing.T) {
 	if err := processCommand("slowlook 45"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if mode != StateSlowLooking {
-		t.Errorf("mode = %q, want %q", mode, StateSlowLooking)
+	if getMode() != StateSlowLooking {
+		t.Errorf("mode = %q, want %q", getMode(), StateSlowLooking)
 	}
 	if targetAngle != 45 {
 		t.Errorf("targetAngle = %d, want 45", targetAngle)
@@ -60,8 +60,8 @@ func TestProcessCommand_Wait(t *testing.T) {
 	if err := processCommand("wait"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if mode != StateWaiting {
-		t.Errorf("mode = %q, want %q", mode, StateWaiting)
+	if getMode() != StateWaiting {
+		t.Errorf("mode = %q, want %q", getMode(), StateWaiting)
 	}
 }
 
@@ -70,8 +70,8 @@ func TestProcessCommand_Speak(t *testing.T) {
 	if err := processCommand("speak"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if mode != StateSpeaking {
-		t.Errorf("mode = %q, want %q", mode, StateSpeaking)
+	if getMode() != StateSpeaking {
+		t.Errorf("mode = %q, want %q", getMode(), StateSpeaking)
 	}
 }
 
@@ -80,8 +80,8 @@ func TestProcessCommand_Headshake(t *testing.T) {
 	if err := processCommand("headshake"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if mode != StateHeadShaking {
-		t.Errorf("mode = %q, want %q", mode, StateHeadShaking)
+	if getMode() != StateHeadShaking {
+		t.Errorf("mode = %q, want %q", getMode(), StateHeadShaking)
 	}
 }
 
@@ -90,8 +90,8 @@ func TestProcessCommand_Stop(t *testing.T) {
 	if err := processCommand("stop"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if mode != StateStopped {
-		t.Errorf("mode = %q, want %q", mode, StateStopped)
+	if getMode() != StateStopped {
+		t.Errorf("mode = %q, want %q", getMode(), StateStopped)
 	}
 }
 
