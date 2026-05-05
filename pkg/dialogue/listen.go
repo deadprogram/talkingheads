@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log"
+	"time"
 
 	"github.com/deadprogram/talkingheads/pkg/commands"
 	mqtt "github.com/eclipse/paho.mqtt.golang"
@@ -104,7 +105,23 @@ func (m *Listener) Listen() {
 	go func() {
 		for req := range queue {
 			m.publishSpeaking(req.who, commands.StatusSpeaking)
+
+			done := make(chan struct{})
+			go func(who string) {
+				ticker := time.NewTicker(200 * time.Millisecond)
+				defer ticker.Stop()
+				for {
+					select {
+					case <-ticker.C:
+						m.publishSpeaking(who, commands.StatusSpeaking)
+					case <-done:
+						return
+					}
+				}
+			}(req.who)
+
 			req.voice.SayOnce(req.what)
+			close(done)
 			m.publishSpeaking(req.who, commands.StatusStopped)
 		}
 	}()
