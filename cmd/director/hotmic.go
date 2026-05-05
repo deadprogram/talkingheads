@@ -40,7 +40,7 @@ func startHotMicInput(ctx context.Context, questions chan question, modelPath, l
 			fmt.Printf("\rhotmic: no actor separator in %q\r\n", text)
 			continue
 		}
-		nameRaw := strings.TrimSpace(text[:idx])
+		nameRaw := strings.ToLower(strings.TrimSpace(text[:idx]))
 		content := strings.TrimSpace(text[idx+1:])
 
 		to, ok := matchActor(nameRaw)
@@ -71,6 +71,14 @@ func startHotMicInput(ctx context.Context, questions chan question, modelPath, l
 //     errors like "lamma3000"→"llama3000" or "jamai"→"gemmai").
 func matchActor(spoken string) (string, bool) {
 	norm := normalise(spoken)
+	// 0. Alias match: check explicit alternate names before anything else.
+	for actor, aliases := range actorAliases {
+		for _, alias := range aliases {
+			if normalise(alias) == norm {
+				return actor, true
+			}
+		}
+	}
 	// 1. Exact match after normalisation.
 	for _, p := range actors {
 		if normalise(p) == norm {
@@ -97,7 +105,7 @@ func matchActor(spoken string) (string, bool) {
 		if n := len(normalise(best)); n > maxLen {
 			maxLen = n
 		}
-		if float64(bestDist) <= float64(maxLen)*0.6 {
+		if float64(bestDist) <= float64(maxLen)*fuzzyThreshold {
 			return best, true
 		}
 	}

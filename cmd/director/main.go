@@ -2,9 +2,11 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/urfave/cli/v2"
@@ -12,10 +14,21 @@ import (
 
 var version = "dev"
 
-var actors = []string{"llama3000", "phineas", "gemmai", "qwentin"}
+var actors = []string{}
+
+// actorAliases maps a canonical actor name to a list of alternative spoken
+// names (e.g. whisper.cpp mis-transcriptions). Populated via
+// --hotmic-actor-alias flags.
+var actorAliases = map[string][]string{}
+
+// fuzzyThreshold is the maximum allowed Levenshtein distance ratio (0–1) for
+// actor name matching. Configurable via --hotmic-fuzzy-threshold.
+var fuzzyThreshold = 0.6
 
 func main() {
-	RunCLI(version)
+	if err := RunCLI(version); err != nil {
+		log.Fatal(err)
+	}
 }
 
 // RunCLI runs the CLI command
@@ -30,6 +43,10 @@ func RunCLI(version string) error {
 			},
 		},
 		Flags: []cli.Flag{
+			&cli.StringSliceFlag{
+				Name:  "actor",
+				Usage: "canonical actor name (repeatable); e.g. --actor llama3000 --actor gemmai",
+			},
 			&cli.StringFlag{
 				Name:  "server",
 				Usage: "mqtt server",
@@ -48,12 +65,25 @@ func RunCLI(version string) error {
 				Usage: "keyboard character that toggles hotmic recording on/off",
 				Value: " ",
 			},
+			&cli.Float64Flag{
+				Name:  "hotmic-fuzzy-threshold",
+				Usage: "maximum Levenshtein distance ratio (0–1) for fuzzy actor name matching; lower values require a closer match",
+				Value: 0.6,
+			},
+			&cli.StringSliceFlag{
+				Name:  "hotmic-actor-alias",
+				Usage: "map alternate spoken names to a canonical actor: --hotmic-actor-alias gemmai:jami|jamai|jenna (repeatable)",
+			},
 		},
 		Action: func(c *cli.Context) error {
 			if c.String("server") == "" {
 				log.Fatal("server is required")
 			}
 
+			actors = c.StringSlice("actor")
+			if len(actors) == 0 {
+				log.Fatal("at least one --actor is required")
+			}
 			conv, err := newConversation(c.String("server"))
 			if err != nil {
 				log.Fatal(err)
@@ -61,8 +91,22 @@ func RunCLI(version string) error {
 
 			go conv.processQuestions()
 
+			for _, entry := range c.StringSlice("hotmic-actor-alias") {
+				parts := strings.SplitN(entry, ":", 2)
+				if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+					return fmt.Errorf("invalid --hotmic-actor-alias %q: expected name:alias1|alias2|...", entry)
+				}
+				name := parts[0]
+				for _, alt := range strings.Split(parts[1], "|") {
+					if alt = strings.TrimSpace(alt); alt != "" {
+						actorAliases[name] = append(actorAliases[name], alt)
+					}
+				}
+			}
+
 			if modelPath := c.String("hotmic-model"); modelPath != "" {
 				key := rune(c.String("hotmic-key")[0])
+				fuzzyThreshold = c.Float64("hotmic-fuzzy-threshold")
 				ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 				defer cancel()
 				return startHotMicInput(ctx, conv.questions, modelPath, c.String("hotmic-lang"), key)
