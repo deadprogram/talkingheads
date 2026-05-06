@@ -17,15 +17,15 @@ type ServoFeetech struct {
 func NewServo() (*ServoFeetech, error) {
 	uart := machine.UART1
 	uart.Configure(machine.UARTConfig{
-		BaudRate: 1000000,
-		TX:       machine.UART_TX_PIN,
-		RX:       machine.UART_RX_PIN,
+		BaudRate: 57600,
+		TX:       machine.UART1_TX_PIN,
+		RX:       machine.UART1_RX_PIN,
 	})
 
 	// Create a new servo transport
 	transport, err := transports.OpenSerial(transports.SerialConfig{
 		Device:   uart,
-		BaudRate: 1000000,
+		BaudRate: 57600,
 	})
 	if err != nil {
 		failure("Failed to open serial transport:" + err.Error())

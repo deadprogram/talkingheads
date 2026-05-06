@@ -14,6 +14,7 @@ func main() {
 	uart.Configure(machine.UARTConfig{})
 	head = NewHeadLED()
 	matrix = NewMatrix()
+	svo, _ = NewServo()
 
 	go lights()
 	go action()
@@ -62,8 +63,6 @@ func lights() {
 }
 
 func action() {
-	svo, _ = NewServo()
-
 	var waitCounter, speakCounter int
 
 	for {
@@ -94,7 +93,7 @@ func action() {
 			speakCounter++
 			if speakCounter >= 5 {
 				speakCounter = 0
-				jitter := randomInt(-10, 11)
+				jitter := randomInt(-100, 101)
 				svo.SetAngle(angle + jitter)
 			}
 
@@ -115,6 +114,6 @@ func action() {
 			angle = 90
 		}
 
-		time.Sleep(10 * time.Millisecond)
+		time.Sleep(250 * time.Millisecond)
 	}
 }
