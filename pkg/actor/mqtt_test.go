@@ -3,8 +3,10 @@ package actor
 import (
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/deadprogram/talkingheads/pkg/commands"
+	"github.com/hybridgroup/yzma/pkg/message"
 )
 
 // mockCommander records the last command sent.
@@ -84,5 +86,246 @@ func TestHandleSpeakingStatus_UnknownStatus(t *testing.T) {
 	// No command expected for an unrecognised status.
 	if len(mc.sentCmds) != 0 {
 		t.Errorf("expected no commands for unknown status, got %v", mc.sentCmds)
+	}
+}
+
+// newTestListener builds a MQTTListener suitable for unit tests: no real MQTT
+// connection, buffered channels, and an optional pause-word set.
+func newTestListener(name string, pauseWords []string) *MQTTListener {
+	pw := make(map[string]bool, len(pauseWords))
+	for _, w := range pauseWords {
+		pw[w] = true
+	}
+	return &MQTTListener{
+		name:       name,
+		commander:  &mockCommander{},
+		incoming:   make(chan string, 32),
+		heard:      make(chan string, 64),
+		pauseWords: pw,
+		done:       make(chan struct{}),
+	}
+}
+
+// --- handleSpeak ---
+
+func TestHandleSpeak_IgnoresSelf(t *testing.T) {
+	l := newTestListener("gemmai", nil)
+
+	payload, _ := json.Marshal(commands.Speak{Who: "gemmai", What: "hello"})
+	l.handleSpeak(nil, &mockMessage{payload: payload})
+
+	select {
+	case got := <-l.heard:
+		t.Errorf("expected nothing in heard, got %q", got)
+	default:
+	}
+}
+
+func TestHandleSpeak_IgnoresPauseWord(t *testing.T) {
+	l := newTestListener("gemmai", []string{"let me think...", "one moment..."})
+
+	payload, _ := json.Marshal(commands.Speak{Who: "phineas", What: "let me think..."})
+	l.handleSpeak(nil, &mockMessage{payload: payload})
+
+	select {
+	case got := <-l.heard:
+		t.Errorf("expected pause word to be filtered, got %q", got)
+	default:
+	}
+}
+
+func TestHandleSpeak_RealSpeech_EnqueuedToHeard(t *testing.T) {
+	l := newTestListener("gemmai", []string{"let me think..."})
+
+	payload, _ := json.Marshal(commands.Speak{Who: "phineas", What: "The sky is blue."})
+	l.handleSpeak(nil, &mockMessage{payload: payload})
+
+	select {
+	case got := <-l.heard:
+		want := "phineas says: The sky is blue."
+		if got != want {
+			t.Errorf("heard: got %q, want %q", got, want)
+		}
+	case <-time.After(time.Second):
+		t.Error("timed out waiting for heard message")
+	}
+}
+
+func TestHandleSpeak_RealSpeech_NotInIncoming(t *testing.T) {
+	l := newTestListener("gemmai", nil)
+
+	payload, _ := json.Marshal(commands.Speak{Who: "phineas", What: "hello there"})
+	l.handleSpeak(nil, &mockMessage{payload: payload})
+
+	select {
+	case got := <-l.incoming:
+		t.Errorf("heard speech must not go to incoming, got %q", got)
+	default:
+	}
+}
+
+func TestHandleSpeak_InvalidPayload(t *testing.T) {
+	l := newTestListener("gemmai", nil)
+
+	l.handleSpeak(nil, &mockMessage{payload: []byte("not json")})
+
+	select {
+	case got := <-l.heard:
+		t.Errorf("expected nothing in heard for invalid JSON, got %q", got)
+	default:
+	}
+}
+
+// --- drainHeard ---
+
+func TestDrainHeard_Empty(t *testing.T) {
+	l := newTestListener("gemmai", nil)
+	conv := []message.Message{}
+	l.drainHeard(&conv)
+	if len(conv) != 0 {
+		t.Errorf("expected empty conversation, got %d messages", len(conv))
+	}
+}
+
+func TestDrainHeard_MultipleMessages(t *testing.T) {
+	l := newTestListener("gemmai", nil)
+	l.heard <- "phineas says: Hello."
+	l.heard <- "phineas says: How are you?"
+
+	conv := []message.Message{}
+	l.drainHeard(&conv)
+
+	if len(conv) != 2 {
+		t.Fatalf("expected 2 messages, got %d", len(conv))
+	}
+	for i, want := range []string{"phineas says: Hello.", "phineas says: How are you?"} {
+		got := conv[i].GetContent()["content"].(string)
+		if got != want {
+			t.Errorf("conv[%d]: got %q, want %q", i, got, want)
+		}
+		if conv[i].GetRole() != "user" {
+			t.Errorf("conv[%d] role: got %q, want \"user\"", i, conv[i].GetRole())
+		}
+	}
+}
+
+// --- MoreFunc ---
+
+func TestMoreFunc_BlocksOnDirectionNotOnHeard(t *testing.T) {
+	l := newTestListener("gemmai", nil)
+
+	// Put speech in heard — MoreFunc must not unblock on this alone.
+	l.heard <- "phineas says: Something."
+
+	moreFn := l.MoreFunc()
+	conv := []message.Message{}
+
+	done := make(chan struct{})
+	go func() {
+		moreFn(&conv)
+		close(done)
+	}()
+
+	// MoreFunc should still be blocked after a short wait.
+	select {
+	case <-done:
+		t.Error("MoreFunc returned before a Direction was sent")
+	case <-time.After(80 * time.Millisecond):
+		// expected — still waiting for a direction
+	}
+
+	// Now send a Direction to unblock it.
+	l.incoming <- "what is consciousness?"
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Error("MoreFunc did not return after Direction was sent")
+	}
+}
+
+func TestMoreFunc_HeardSpeechPrecedesDirection(t *testing.T) {
+	l := newTestListener("gemmai", nil)
+	l.heard <- "phineas says: The answer is 42."
+
+	moreFn := l.MoreFunc()
+	conv := []message.Message{}
+
+	go func() { l.incoming <- "what did phineas say?" }()
+	moreFn(&conv)
+
+	if len(conv) < 2 {
+		t.Fatalf("expected at least 2 messages, got %d", len(conv))
+	}
+	// Heard speech must come before the Direction.
+	first := conv[0].GetContent()["content"].(string)
+	last := conv[len(conv)-1].GetContent()["content"].(string)
+	if first != "phineas says: The answer is 42." {
+		t.Errorf("first message: got %q, want heard speech", first)
+	}
+	if last != "what did phineas say?" {
+		t.Errorf("last message: got %q, want direction", last)
+	}
+}
+
+func TestMoreFunc_HeardArrivingDuringWaitIsIncluded(t *testing.T) {
+	l := newTestListener("gemmai", nil)
+
+	moreFn := l.MoreFunc()
+	conv := []message.Message{}
+
+	// Send heard speech and direction concurrently.
+	go func() {
+		time.Sleep(20 * time.Millisecond)
+		l.heard <- "phineas says: Just thought of something."
+		l.incoming <- "respond to phineas"
+	}()
+
+	moreFn(&conv)
+
+	// Both the heard speech and the direction must be in the conversation.
+	var contents []string
+	for _, m := range conv {
+		contents = append(contents, m.GetContent()["content"].(string))
+	}
+	foundHeard := false
+	foundDirection := false
+	for _, c := range contents {
+		if c == "phineas says: Just thought of something." {
+			foundHeard = true
+		}
+		if c == "respond to phineas" {
+			foundDirection = true
+		}
+	}
+	if !foundHeard {
+		t.Errorf("heard speech not found in conversation; got %v", contents)
+	}
+	if !foundDirection {
+		t.Errorf("direction not found in conversation; got %v", contents)
+	}
+	// Direction must be the last message.
+	last := conv[len(conv)-1].GetContent()["content"].(string)
+	if last != "respond to phineas" {
+		t.Errorf("direction must be last; got %q", last)
+	}
+}
+
+func TestMoreFunc_PauseWordsNotAddedToConversation(t *testing.T) {
+	l := newTestListener("gemmai", []string{"let me think...", "one moment..."})
+
+	// These go through handleSpeak which filters them; simulate that filter
+	// path by putting only real speech into heard (as handleSpeak would).
+	l.heard <- "phineas says: real sentence"
+
+	moreFn := l.MoreFunc()
+	conv := []message.Message{}
+	go func() { l.incoming <- "direction" }()
+	moreFn(&conv)
+
+	for _, m := range conv {
+		c := m.GetContent()["content"].(string)
+		if c == "let me think..." || c == "one moment..." {
+			t.Errorf("pause word leaked into conversation: %q", c)
+		}
 	}
 }

@@ -68,10 +68,16 @@ All payloads use the JSON types from `pkg/commands`.
 
 | Topic | Direction | Description |
 |---|---|---|
-| `direction/<name>` | subscribe | Direct question from the Director |
-| `speak/#` | subscribe | Hear what other Actors say |
+| `direction/<name>` | subscribe | Direct question from the Director — triggers a response |
+| `speak/#` | subscribe | Hear what other Actors say — added as context only, never triggers a response |
 | `speaking/<name>` | subscribe | Notifications from Dialogue when this Actor's voice starts or stops playing |
 | `speak/<name>` | publish | Publish the Actor's response |
+
+### Heard speech from other Actors
+
+When another Actor publishes a sentence to `speak/<other>`, this Actor receives it via the `speak/#` subscription and adds it to the conversation as context. The heard speech is buffered and injected into the conversation immediately before the next Direction is processed — the Actor never responds to heard speech on its own.
+
+Pause words (filler phrases such as `"let me think..."`) are automatically filtered out and are never added to the conversation.
 
 ### Speaking status
 

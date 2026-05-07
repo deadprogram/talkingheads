@@ -17,18 +17,22 @@ import (
 // The published response payload is {"who":"<name>","what":"<content>"},
 // which is compatible with the speak/# subscription in pkg/dialogue.
 type MQTTListener struct {
-	name      string
-	commander Commander
-	client    mqtt.Client
-	incoming  chan string
-	done      chan struct{}
-	closeOnce sync.Once
+	name       string
+	commander  Commander
+	client     mqtt.Client
+	incoming   chan string
+	heard      chan string
+	pauseWords map[string]bool
+	done       chan struct{}
+	closeOnce  sync.Once
 }
 
 // NewMQTTListener connects to the broker, subscribes to "direction/<name>" for
 // direct prompts and "speak/#" to hear other actors, and returns a
 // ready-to-use MQTTListener. If commander is nil, a LogCommander is used.
-func NewMQTTListener(name, server string, commander Commander) (*MQTTListener, error) {
+// pauseWords is the list of filler words that should be ignored when heard
+// from other actors (they are not real content and should not enter context).
+func NewMQTTListener(name, server string, commander Commander, pauseWords []string) (*MQTTListener, error) {
 	if commander == nil {
 		commander = &LogCommander{}
 	}
@@ -44,12 +48,18 @@ func NewMQTTListener(name, server string, commander Commander) (*MQTTListener, e
 		return nil, token.Error()
 	}
 
+	pauseWordSet := make(map[string]bool, len(pauseWords))
+	for _, w := range pauseWords {
+		pauseWordSet[w] = true
+	}
 	l := &MQTTListener{
-		name:      name,
-		commander: commander,
-		client:    client,
-		incoming:  make(chan string, 32),
-		done:      make(chan struct{}),
+		name:       name,
+		commander:  commander,
+		client:     client,
+		incoming:   make(chan string, 32),
+		heard:      make(chan string, 64),
+		pauseWords: pauseWordSet,
+		done:       make(chan struct{}),
 	}
 
 	directionTopic := "direction/" + name
@@ -116,8 +126,36 @@ func (l *MQTTListener) handleSpeak(_ mqtt.Client, msg mqtt.Message) {
 	if s.Who == l.name {
 		return
 	}
+	// Ignore pause words — they are filler content and should not enter context.
+	if l.pauseWords[s.What] {
+		return
+	}
 	log.Printf("Heard %s say: %s\n", s.Who, s.What)
-	l.enqueue(s.Who + " says: " + s.What)
+	l.enqueueHeard(s.Who + " says: " + s.What)
+}
+
+func (l *MQTTListener) enqueueHeard(text string) {
+	select {
+	case l.heard <- text:
+	case <-l.done:
+	}
+}
+
+// drainHeard appends all buffered heard-speech messages to the conversation
+// without blocking. These messages provide context from other actors but do
+// not trigger a response by themselves.
+func (l *MQTTListener) drainHeard(conversation *[]message.Message) {
+	for {
+		select {
+		case text, ok := <-l.heard:
+			if !ok || text == "" {
+				return
+			}
+			*conversation = append(*conversation, message.Chat{Role: "user", Content: text})
+		default:
+			return
+		}
+	}
 }
 
 func (l *MQTTListener) enqueue(text string) {
@@ -127,23 +165,36 @@ func (l *MQTTListener) enqueue(text string) {
 	}
 }
 
-// MoreFunc returns a moreConversationFunc that blocks until at least one MQTT
-// message is available, then drains all buffered messages and appends each as
-// a user turn. Returns without appending if the listener is closed.
+// MoreFunc returns a moreConversationFunc that blocks until a Direction
+// arrives, then appends any buffered heard-speech context followed by the
+// Direction. Heard speech from other actors is accumulated in the conversation
+// but never triggers a response on its own.
 func (l *MQTTListener) MoreFunc() func(*[]message.Message) {
 	return func(conversation *[]message.Message) {
-		// Block until the first message arrives or the listener is closed.
+		// Drain any heard speech that accumulated during the previous
+		// generation cycle, adding it as context.
+		l.drainHeard(conversation)
+
+		// Block until a Direction arrives or the listener is closed.
+		var directionText string
 		select {
 		case text, ok := <-l.incoming:
 			if !ok || text == "" {
 				return
 			}
-			*conversation = append(*conversation, message.Chat{Role: "user", Content: text})
+			directionText = text
 		case <-l.done:
 			return
 		}
 
-		// Drain any additional buffered messages without blocking.
+		// Drain any heard speech that arrived while waiting for Direction,
+		// so the Actor has the most up-to-date context before seeing it.
+		l.drainHeard(conversation)
+
+		// Append the Direction that triggered this turn.
+		*conversation = append(*conversation, message.Chat{Role: "user", Content: directionText})
+
+		// Drain any additional buffered Direction messages without blocking.
 		for {
 			select {
 			case text, ok := <-l.incoming:

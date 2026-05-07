@@ -212,8 +212,26 @@ func run(c *cli.Context) error {
 	var moreFunc func(*[]message.Message)
 	var outputFunc func(string)
 
+	cfg := actor.DefaultConfig()
+	cfg.Temperature = float32(c.Float64("temperature"))
+	cfg.TopP = float32(c.Float64("top-p"))
+	cfg.TopK = int32(c.Int("top-k"))
+	cfg.MaxTokens = c.Int("max-tokens")
+	cfg.ContextSize = uint32(c.Int("context-size"))
+	cfg.BatchSize = uint32(c.Int("batch-size"))
+	cfg.UBatchSize = uint32(c.Int("ubatch-size"))
+	cfg.ModelFormat = parseModelFormat(c.String("model-format"))
+	cfg.InjectTools = c.Bool("inject-tools")
+	cfg.EnableThinking = c.Bool("enable-thinking")
+	cfg.RepeatPenalty = float32(c.Float64("repeat-penalty"))
+	cfg.FreqPenalty = float32(c.Float64("freq-penalty"))
+	cfg.PresencePenalty = float32(c.Float64("presence-penalty"))
+	cfg.DryMultiplier = float32(c.Float64("dry-multiplier"))
+	cfg.PauseInterval = c.Int("pause-interval")
+	cfg.Verbose = verbose
+
 	if server != "" {
-		ml, err := actor.NewMQTTListener(name, server, commander)
+		ml, err := actor.NewMQTTListener(name, server, commander, cfg.PauseWords)
 		if err != nil {
 			return cli.Exit(fmt.Sprintf("failed to connect to MQTT broker: %v", err), 1)
 		}
@@ -249,24 +267,6 @@ func run(c *cli.Context) error {
 	if err != nil {
 		return cli.Exit(fmt.Sprintf("failed to load script: %v", err), 1)
 	}
-
-	cfg := actor.DefaultConfig()
-	cfg.Temperature = float32(c.Float64("temperature"))
-	cfg.TopP = float32(c.Float64("top-p"))
-	cfg.TopK = int32(c.Int("top-k"))
-	cfg.MaxTokens = c.Int("max-tokens")
-	cfg.ContextSize = uint32(c.Int("context-size"))
-	cfg.BatchSize = uint32(c.Int("batch-size"))
-	cfg.UBatchSize = uint32(c.Int("ubatch-size"))
-	cfg.ModelFormat = parseModelFormat(c.String("model-format"))
-	cfg.InjectTools = c.Bool("inject-tools")
-	cfg.EnableThinking = c.Bool("enable-thinking")
-	cfg.RepeatPenalty = float32(c.Float64("repeat-penalty"))
-	cfg.FreqPenalty = float32(c.Float64("freq-penalty"))
-	cfg.PresencePenalty = float32(c.Float64("presence-penalty"))
-	cfg.DryMultiplier = float32(c.Float64("dry-multiplier"))
-	cfg.PauseInterval = c.Int("pause-interval")
-	cfg.Verbose = verbose
 
 	a, err := actor.NewActor(modelPath, cfg, commander, moreFunc, outputFunc)
 	if err != nil {
