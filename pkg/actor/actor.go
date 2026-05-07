@@ -304,29 +304,8 @@ func (a *Actor) Run(ctx context.Context, systemPrompt string) error {
 
 	needMoreInput := true
 	consecutiveToolOnlyTurns := 0
-	const maxConsecutiveToolOnlyTurns = 2
 
-	// Pause-word deck: persists across turns so every word is used once before
-	// any word repeats. A mutex guards deck/pos since the goroutine from the
-	// previous turn may still be exiting when the next one starts.
-	var pauseMu sync.Mutex
-	pauseDeck := make([]int, len(a.cfg.PauseWords))
-	for i := range pauseDeck {
-		pauseDeck[i] = i
-	}
-	rand.Shuffle(len(pauseDeck), func(i, j int) { pauseDeck[i], pauseDeck[j] = pauseDeck[j], pauseDeck[i] })
-	pausePos := 0
-	nextPauseWord := func() string {
-		pauseMu.Lock()
-		defer pauseMu.Unlock()
-		if pausePos >= len(pauseDeck) {
-			rand.Shuffle(len(pauseDeck), func(i, j int) { pauseDeck[i], pauseDeck[j] = pauseDeck[j], pauseDeck[i] })
-			pausePos = 0
-		}
-		w := a.cfg.PauseWords[pauseDeck[pausePos]]
-		pausePos++
-		return w
-	}
+	nextPauseWord := a.setupPauseWords()
 
 	for {
 		var pauseDone chan struct{}
@@ -362,66 +341,90 @@ func (a *Actor) Run(ctx context.Context, systemPrompt string) error {
 		}
 
 		if len(toolCalls) > 0 {
-			toolResults := a.callTools(ctx, toolCalls)
-
-			if !a.templateSupportsToolMessages() {
-				// Format has no tool-role support (e.g. Gemma 3). Tool calls are
-				// fire-and-forget physical action cues; never append tool call or
-				// tool result messages to the conversation history.
-				if hadText {
-					a.appendAssistant(&conversation, content)
-					consecutiveToolOnlyTurns = 0
-					needMoreInput = true
-				} else {
-					consecutiveToolOnlyTurns++
-					if consecutiveToolOnlyTurns >= maxConsecutiveToolOnlyTurns {
-						log.Printf("breaking tool-call loop after %d consecutive tool-only turns", consecutiveToolOnlyTurns)
-						consecutiveToolOnlyTurns = 0
-						needMoreInput = true
-					} else {
-						conversation = append(conversation, message.Chat{
-							Role:    "user",
-							Content: "You called motion tools but included no spoken words. You MUST write your actual answer as plain text. Reply now with spoken sentences.",
-						})
-						log.Printf("tool-only turn %d/%d, nudging for verbal response", consecutiveToolOnlyTurns, maxConsecutiveToolOnlyTurns)
-						needMoreInput = false
-					}
-				}
-				continue
-			}
-
-			if hadText {
-				// Text was spoken alongside the tool calls — record the full
-				// exchange (including spoken text) so subsequent turns have correct context.
-				a.appendToolCalls(&conversation, toolCalls, content)
-				conversation = append(conversation, toolResults...)
-				consecutiveToolOnlyTurns = 0
-				needMoreInput = true
-			} else {
-				consecutiveToolOnlyTurns++
-				a.appendToolCalls(&conversation, toolCalls, "")
-				conversation = append(conversation, toolResults...)
-				if consecutiveToolOnlyTurns >= maxConsecutiveToolOnlyTurns {
-					// Still no text after nudge — give up and wait for new input.
-					log.Printf("breaking tool-call loop after %d consecutive tool-only turns", consecutiveToolOnlyTurns)
-					consecutiveToolOnlyTurns = 0
-					needMoreInput = true
-				} else {
-					// Inject a user nudge so the model understands it must also
-					// give a verbal response — tool calls alone are not enough.
-					conversation = append(conversation, message.Chat{
-						Role:    "user",
-						Content: "You called motion tools but included no spoken words. Note: calling tool_movement with command 'speak' is a head-motion cue — it is NOT a verbal response. You MUST write your actual answer as plain text outside any function blocks. Reply now with spoken sentences.",
-					})
-					log.Printf("tool-only turn %d/%d, nudging for verbal response", consecutiveToolOnlyTurns, maxConsecutiveToolOnlyTurns)
-					needMoreInput = false
-				}
-			}
+			consecutiveToolOnlyTurns, needMoreInput = a.handleToolCalls(ctx, &conversation, toolCalls, content, hadText, consecutiveToolOnlyTurns)
 			continue
 		}
 
 		a.appendAssistant(&conversation, content)
 		needMoreInput = true
+	}
+}
+
+// handleToolCalls processes a turn that produced tool calls, updating the
+// conversation and returning the new consecutiveToolOnlyTurns and needMoreInput values.
+func (a *Actor) handleToolCalls(ctx context.Context, conversation *[]message.Message, toolCalls []message.ToolCall, content string, hadText bool, consecutiveToolOnlyTurns int) (int, bool) {
+	const maxConsecutiveToolOnlyTurns = 2
+
+	toolResults := a.callTools(ctx, toolCalls)
+
+	if !a.templateSupportsToolMessages() {
+		// Format has no tool-role support (e.g. Gemma 3). Tool calls are
+		// fire-and-forget physical action cues; never append tool call or
+		// tool result messages to the conversation history.
+		if hadText {
+			a.appendAssistant(conversation, content)
+			return 0, true
+		}
+		consecutiveToolOnlyTurns++
+		if consecutiveToolOnlyTurns >= maxConsecutiveToolOnlyTurns {
+			log.Printf("breaking tool-call loop after %d consecutive tool-only turns", consecutiveToolOnlyTurns)
+			return 0, true
+		}
+		*conversation = append(*conversation, message.Chat{
+			Role:    "user",
+			Content: "You called motion tools but included no spoken words. You MUST write your actual answer as plain text. Reply now with spoken sentences.",
+		})
+		log.Printf("tool-only turn %d/%d, nudging for verbal response", consecutiveToolOnlyTurns, maxConsecutiveToolOnlyTurns)
+		return consecutiveToolOnlyTurns, false
+	}
+
+	if hadText {
+		// Text was spoken alongside the tool calls — record the full
+		// exchange (including spoken text) so subsequent turns have correct context.
+		a.appendToolCalls(conversation, toolCalls, content)
+		*conversation = append(*conversation, toolResults...)
+		return 0, true
+	}
+	consecutiveToolOnlyTurns++
+	a.appendToolCalls(conversation, toolCalls, "")
+	*conversation = append(*conversation, toolResults...)
+	if consecutiveToolOnlyTurns >= maxConsecutiveToolOnlyTurns {
+		// Still no text after nudge — give up and wait for new input.
+		log.Printf("breaking tool-call loop after %d consecutive tool-only turns", consecutiveToolOnlyTurns)
+		return 0, true
+	}
+	// Inject a user nudge so the model understands it must also
+	// give a verbal response — tool calls alone are not enough.
+	*conversation = append(*conversation, message.Chat{
+		Role:    "user",
+		Content: "You called motion tools but included no spoken words. Note: calling tool_movement with command 'speak' is a head-motion cue — it is NOT a verbal response. You MUST write your actual answer as plain text outside any function blocks. Reply now with spoken sentences.",
+	})
+	log.Printf("tool-only turn %d/%d, nudging for verbal response", consecutiveToolOnlyTurns, maxConsecutiveToolOnlyTurns)
+	return consecutiveToolOnlyTurns, false
+}
+
+// setupPauseWords builds a shuffled deck of pause words and returns a function
+// that yields the next word, reshuffling when the deck is exhausted. A mutex
+// guards the deck so the goroutine from the previous turn may still be exiting
+// when the next one starts.
+func (a *Actor) setupPauseWords() func() string {
+	var mu sync.Mutex
+	deck := make([]int, len(a.cfg.PauseWords))
+	for i := range deck {
+		deck[i] = i
+	}
+	rand.Shuffle(len(deck), func(i, j int) { deck[i], deck[j] = deck[j], deck[i] })
+	pos := 0
+	return func() string {
+		mu.Lock()
+		defer mu.Unlock()
+		if pos >= len(deck) {
+			rand.Shuffle(len(deck), func(i, j int) { deck[i], deck[j] = deck[j], deck[i] })
+			pos = 0
+		}
+		w := a.cfg.PauseWords[deck[pos]]
+		pos++
+		return w
 	}
 }
 
