@@ -16,7 +16,8 @@ TARGET_USER="${4:-arduino}"
 TARGET="$TARGET_USER@$TARGET_HOST"
 OUTPUT_PATH="${PROGRAM_NAME%.*}"
 echo "Building program from source '$SOURCE_PATH'..."
-if ! GOOS=linux GOARCH=arm64 go build -o "$OUTPUT_PATH" "$SOURCE_PATH"; then
+cd $SOURCE_PATH
+if ! GOOS=linux GOARCH=arm64 go build -o "$OUTPUT_PATH" .; then
     echo "Error: Failed to build program from $SOURCE_PATH"
     exit 1
 fi
