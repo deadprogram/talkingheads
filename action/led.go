@@ -11,21 +11,14 @@ import (
 
 const LEDCount = 22
 
-var (
-	red    = color.RGBA{R: 0xff, G: 0x00, B: 0x00}
-	green  = color.RGBA{R: 0x00, G: 0xff, B: 0x00}
-	blue   = color.RGBA{R: 0x00, G: 0x00, B: 0xff}
-	purple = color.RGBA{R: 160, G: 32, B: 240}
-	black  = color.RGBA{R: 0x00, G: 0x00, B: 0x00}
-)
-
 // HeadLED controls the WS2812 LEDs.
 type HeadLED struct {
 	ws2812.Device
-	LED     []color.RGBA
-	alt     bool
-	forward bool
-	pos     int
+	LED        []color.RGBA
+	cyclePhase uint8
+	cycleDir   int
+	forward    bool
+	pos        int
 }
 
 // NewHeadLED returns a new HeadLED.
@@ -66,37 +59,52 @@ func (v *HeadLED) Clear() {
 
 // Red turns all of the head LEDs red.
 func (v *HeadLED) Red() {
-	v.SetColor(color.RGBA{R: 0xff, G: 0x00, B: 0x00})
+	v.SetColor(red)
 }
 
 // Green turns all of the head LEDs green.
 func (v *HeadLED) Green() {
-	v.SetColor(color.RGBA{R: 0x00, G: 0xff, B: 0x00})
+	v.SetColor(green)
 }
 
 // Blue turns all of the head LEDs blue.
 func (v *HeadLED) Blue() {
-	v.SetColor(color.RGBA{R: 0x00, G: 0x00, B: 0xff})
+	v.SetColor(blue)
 }
 
-// Alternate the 2 colors.
+// Alternate smoothly cycles all LEDs between color1 and color2.
+// Each call advances the blend phase; call at a fixed rate (e.g. 100ms) for smooth transitions.
 func (v *HeadLED) Alternate(color1, color2 color.RGBA) {
-	v.alt = !v.alt
-	for i := range v.LED {
-		v.alt = !v.alt
-		if v.alt {
-			v.LED[i] = color1
-		} else {
-			v.LED[i] = color2
-		}
+	const step = 16 // phase increment per call; 100ms * (256/16) * 2 ≈ 3.2s per full cycle
+	if v.cycleDir == 0 {
+		v.cycleDir = 1
 	}
+	next := int(v.cyclePhase) + v.cycleDir*step
+	if next >= 255 {
+		next = 255
+		v.cycleDir = -1
+	} else if next <= 0 {
+		next = 0
+		v.cycleDir = 1
+	}
+	v.cyclePhase = uint8(next)
 
+	t := v.cyclePhase
+	t2 := 255 - t
+	c := color.RGBA{
+		R: uint8((uint16(color1.R)*uint16(t2) + uint16(color2.R)*uint16(t)) / 255),
+		G: uint8((uint16(color1.G)*uint16(t2) + uint16(color2.G)*uint16(t)) / 255),
+		B: uint8((uint16(color1.B)*uint16(t2) + uint16(color2.B)*uint16(t)) / 255),
+	}
+	for i := range v.LED {
+		v.LED[i] = c
+	}
 	v.Show()
 }
 
 // Xmas light style
 func (v *HeadLED) Xmas() {
-	v.Alternate(color.RGBA{R: 0xff, G: 0x00, B: 0x00}, color.RGBA{R: 0x00, G: 0xff, B: 0x00})
+	v.Alternate(red, green)
 }
 
 // Cylon head mode.
@@ -117,11 +125,11 @@ func (v *HeadLED) Cylon() {
 
 	for i := 0; i < LEDCount; i += 2 {
 		if i == v.pos {
-			v.LED[i] = color.RGBA{R: 0xff, G: 0x00, B: 0x00}
-			v.LED[i+1] = color.RGBA{R: 0xff, G: 0x00, B: 0x00}
+			v.LED[i] = red
+			v.LED[i+1] = red
 		} else {
-			v.LED[i] = color.RGBA{R: 0x00, G: 0x00, B: 0x00}
-			v.LED[i+1] = color.RGBA{R: 0x00, G: 0x00, B: 0x00}
+			v.LED[i] = black
+			v.LED[i+1] = black
 		}
 	}
 

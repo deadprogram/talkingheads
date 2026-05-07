@@ -45,16 +45,16 @@ func lights() {
 	for {
 		switch getMode() {
 		case StateSpeaking:
-			head.Alternate(green, blue)
+			head.Alternate(personalityColor(), personalityColorAlternate())
 			matrix.StartVUMeter()
 		case StateWaiting:
-			head.Green()
+			head.SetColor(personalityColor())
 			matrix.StartPulse()
 		case StateHeadShaking:
 			head.Red()
 			matrix.StartPulse()
 		default:
-			head.Off()
+			head.SetColor(personalityColor())
 			matrix.StartPulse()
 		}
 
