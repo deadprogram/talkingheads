@@ -161,6 +161,10 @@ func main() {
 }
 
 func run(c *cli.Context) error {
+	fmt.Print("\033[H\033[2J")
+	fmt.Print(banner)
+	fmt.Println()
+
 	modelURL := c.String("model-url")
 	processor := c.String("processor")
 	updateInstall := c.Bool("update-install")

@@ -76,6 +76,10 @@ func RunCLI(version string) error {
 			},
 		},
 		Action: func(c *cli.Context) error {
+			fmt.Print("\033[H\033[2J")
+			fmt.Print(banner)
+			fmt.Println()
+
 			if c.String("server") == "" {
 				log.Fatal("server is required")
 			}

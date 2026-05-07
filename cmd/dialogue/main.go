@@ -106,6 +106,10 @@ func main() {
 }
 
 func serveAction(c *cli.Context) error {
+	fmt.Print("\033[H\033[2J")
+	fmt.Print(banner)
+	fmt.Println()
+
 	server := c.String("server")
 	dataDir := c.String("data")
 	gpu := c.Bool("gpu")
