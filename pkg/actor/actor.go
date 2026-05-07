@@ -349,32 +349,7 @@ func (a *Actor) Run(ctx context.Context, systemPrompt string) error {
 
 			if len(a.cfg.PauseWords) > 0 && a.outputFunc != nil {
 				pauseDone = make(chan struct{})
-				go func() {
-					maxInterval := a.cfg.PauseInterval
-					if maxInterval <= 0 {
-						maxInterval = DefaultPauseInterval
-					}
-					// half of maxInterval in milliseconds, used as the random base
-					halfMs := int64(maxInterval) * 500
-
-					// Say the first pause word immediately.
-					select {
-					case <-pauseDone:
-						return
-					default:
-						a.outputFunc(nextPauseWord())
-					}
-
-					for {
-						jitter := time.Duration(halfMs+rand.Int63n(halfMs+1)) * time.Millisecond
-						select {
-						case <-time.After(jitter):
-							a.outputFunc(nextPauseWord())
-						case <-pauseDone:
-							return
-						}
-					}
-				}()
+				go a.runPauseWords(pauseDone, nextPauseWord)
 			}
 		}
 
@@ -447,6 +422,35 @@ func (a *Actor) Run(ctx context.Context, systemPrompt string) error {
 
 		a.appendAssistant(&conversation, content)
 		needMoreInput = true
+	}
+}
+
+// runPauseWords emits pause words via outputFunc until done is closed.
+// It is run in a goroutine and should be stopped by closing done.
+func (a *Actor) runPauseWords(done <-chan struct{}, next func() string) {
+	maxInterval := a.cfg.PauseInterval
+	if maxInterval <= 0 {
+		maxInterval = DefaultPauseInterval
+	}
+	// half of maxInterval in milliseconds, used as the random base
+	halfMs := int64(maxInterval) * 500
+
+	// Say the first pause word immediately.
+	select {
+	case <-done:
+		return
+	default:
+		a.outputFunc(next())
+	}
+
+	for {
+		jitter := time.Duration(halfMs+rand.Int63n(halfMs+1)) * time.Millisecond
+		select {
+		case <-time.After(jitter):
+			a.outputFunc(next())
+		case <-done:
+			return
+		}
 	}
 }
 

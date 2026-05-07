@@ -62,30 +62,30 @@ func NewMQTTListener(name, server string, commander Commander, pauseWords []stri
 		done:       make(chan struct{}),
 	}
 
-	directionTopic := "direction/" + name
-	token = client.Subscribe(directionTopic, 0, l.handleDirection)
-	if token.Wait() && token.Error() != nil {
+	if err := subscribe(client, "direction/"+name, l.handleDirection); err != nil {
 		client.Disconnect(250)
-		return nil, token.Error()
+		return nil, err
 	}
-	log.Printf("Subscribed to %s\n", directionTopic)
-
-	token = client.Subscribe("speak/#", 0, l.handleSpeak)
-	if token.Wait() && token.Error() != nil {
+	if err := subscribe(client, "speak/#", l.handleSpeak); err != nil {
 		client.Disconnect(250)
-		return nil, token.Error()
+		return nil, err
 	}
-	log.Printf("Subscribed to speak/#\n")
-
-	speakingTopic := "speaking/" + name
-	token = client.Subscribe(speakingTopic, 0, l.handleSpeakingStatus)
-	if token.Wait() && token.Error() != nil {
+	if err := subscribe(client, "speaking/"+name, l.handleSpeakingStatus); err != nil {
 		client.Disconnect(250)
-		return nil, token.Error()
+		return nil, err
 	}
-	log.Printf("Subscribed to %s\n", speakingTopic)
 
 	return l, nil
+}
+
+// subscribe subscribes to a single MQTT topic and logs the result.
+func subscribe(client mqtt.Client, topic string, handler mqtt.MessageHandler) error {
+	token := client.Subscribe(topic, 0, handler)
+	if token.Wait() && token.Error() != nil {
+		return token.Error()
+	}
+	log.Printf("Subscribed to %s\n", topic)
+	return nil
 }
 
 func (l *MQTTListener) handleDirection(_ mqtt.Client, msg mqtt.Message) {
@@ -158,6 +158,22 @@ func (l *MQTTListener) drainHeard(conversation *[]message.Message) {
 	}
 }
 
+// drainIncoming appends all buffered Direction messages to the conversation
+// without blocking.
+func (l *MQTTListener) drainIncoming(conversation *[]message.Message) {
+	for {
+		select {
+		case text, ok := <-l.incoming:
+			if !ok || text == "" {
+				return
+			}
+			*conversation = append(*conversation, message.Chat{Role: "user", Content: text})
+		default:
+			return
+		}
+	}
+}
+
 func (l *MQTTListener) enqueue(text string) {
 	select {
 	case l.incoming <- text:
@@ -195,17 +211,7 @@ func (l *MQTTListener) MoreFunc() func(*[]message.Message) {
 		*conversation = append(*conversation, message.Chat{Role: "user", Content: directionText})
 
 		// Drain any additional buffered Direction messages without blocking.
-		for {
-			select {
-			case text, ok := <-l.incoming:
-				if !ok || text == "" {
-					return
-				}
-				*conversation = append(*conversation, message.Chat{Role: "user", Content: text})
-			default:
-				return
-			}
-		}
+		l.drainIncoming(conversation)
 	}
 }
 
