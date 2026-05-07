@@ -5,8 +5,8 @@ Package `commands` defines the shared Go types and JSON payload formats for all 
 ## Go types
 
 ```go
-// Ask is the payload for the ask/# MQTT topic.
-type Ask struct {
+// Direction is the payload for the direction/# MQTT topic.
+type Direction struct {
     Who  string `json:"who"`
     What string `json:"what"`
 }
@@ -34,11 +34,11 @@ const (
 
 | Topic | Direction | Publisher | Subscriber | Description |
 |---|---|---|---|---|
-| `ask/#` | → Actors | Director | Actor | Questions from the Director to Actors |
+| `direction/#` | → Actors | Director | Actor | Questions from the Director to Actors |
 | `speak/#` | → Dialogue & Actors | Actor | Dialogue, Actor | Messages spoken by an Actor |
 | `speaking/#` | → Actors | Dialogue | Actor | Notifications when speaking starts and stops |
 
-### `ask/#`
+### `direction/#`
 
 Questions from the Director to Actors.
 

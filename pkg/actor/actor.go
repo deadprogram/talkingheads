@@ -357,6 +357,14 @@ func (a *Actor) Run(ctx context.Context, systemPrompt string) error {
 					// half of maxInterval in milliseconds, used as the random base
 					halfMs := int64(maxInterval) * 500
 
+					// Say the first pause word immediately.
+					select {
+					case <-pauseDone:
+						return
+					default:
+						a.outputFunc(nextPauseWord())
+					}
+
 					for {
 						jitter := time.Duration(halfMs+rand.Int63n(halfMs+1)) * time.Millisecond
 						select {

@@ -1,8 +1,8 @@
 package commands
 
-// Ask is the payload for the ask/# MQTT topic.
+// Direction is the payload for the ask/# MQTT topic.
 // It represents a question from the Director to an Actor.
-type Ask struct {
+type Direction struct {
 	Who  string `json:"who"`
 	What string `json:"what"`
 }

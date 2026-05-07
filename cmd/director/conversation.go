@@ -42,9 +42,9 @@ func newConversation(server string) (*conversation, error) {
 
 func (c *conversation) processQuestions() error {
 	for question := range c.questions {
-		topic := "ask/" + question.To
+		topic := "direction/" + question.To
 
-		payload, err := json.Marshal(commands.Ask{Who: question.To, What: question.Content})
+		payload, err := json.Marshal(commands.Direction{Who: question.To, What: question.Content})
 		if err != nil {
 			log.Printf("failed marshalling ask message: %v", err)
 			continue

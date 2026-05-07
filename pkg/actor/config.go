@@ -3,15 +3,18 @@ package actor
 import "github.com/hybridgroup/yzma/pkg/message"
 
 var defaultPauseWords = []string{
-	"well...", "ok...", "ummm...", "hmmm...", "uhhhh...", "ahhhh...",
-	"right...", "so...", "now...", "alright...", "okay...", "sure...",
 	"let me think...", "let me see...", "let me consider that...", "let me ponder that...",
-	"let's see...", "let's think...",
-	"good question...", "great question...", "interesting...", "fascinating...",
-	"now then...", "well then...", "well now...",
-	"ah yes...", "ah right...", "I see...",
-	"one moment...", "give me a second...", "hold on...",
-	"I'm thinking...", "thinking...",
+	"let me figure that out...", "let me work that out...",
+	"let's see...", "let's think...", "let's see now...", "let's think about that...",
+	"that is interesting...", "well, that is interesting...", "ok, that is interesting...",
+	"now then...", "well then...", "well now...", "right then...",
+	"I see...", "I see now...",
+	"one moment...", "one moment please...",
+	"give me a second...", "give me a moment...",
+	"hold on a moment...", "hold on a second...",
+	"I'm thinking...", "I'm working on that...",
+	"let me consider that briefly...",
+	"well let me see...", "now let me think...",
 }
 
 const (

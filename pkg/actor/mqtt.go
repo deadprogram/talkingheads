@@ -12,7 +12,7 @@ import (
 )
 
 // MQTTListener connects to an MQTT broker and wires up an Actor to receive
-// user input from "ask/<name>" and publish responses to "speak/<name>".
+// user input from "direction/<name>" and publish responses to "speak/<name>".
 //
 // The published response payload is {"who":"<name>","what":"<content>"},
 // which is compatible with the speak/# subscription in pkg/dialogue.
@@ -25,7 +25,7 @@ type MQTTListener struct {
 	closeOnce sync.Once
 }
 
-// NewMQTTListener connects to the broker, subscribes to "ask/<name>" for
+// NewMQTTListener connects to the broker, subscribes to "direction/<name>" for
 // direct prompts and "speak/#" to hear other actors, and returns a
 // ready-to-use MQTTListener. If commander is nil, a LogCommander is used.
 func NewMQTTListener(name, server string, commander Commander) (*MQTTListener, error) {
@@ -52,13 +52,13 @@ func NewMQTTListener(name, server string, commander Commander) (*MQTTListener, e
 		done:      make(chan struct{}),
 	}
 
-	askTopic := "ask/" + name
-	token = client.Subscribe(askTopic, 0, l.handleAsk)
+	directionTopic := "direction/" + name
+	token = client.Subscribe(directionTopic, 0, l.handleDirection)
 	if token.Wait() && token.Error() != nil {
 		client.Disconnect(250)
 		return nil, token.Error()
 	}
-	log.Printf("Subscribed to %s\n", askTopic)
+	log.Printf("Subscribed to %s\n", directionTopic)
 
 	token = client.Subscribe("speak/#", 0, l.handleSpeak)
 	if token.Wait() && token.Error() != nil {
@@ -78,13 +78,13 @@ func NewMQTTListener(name, server string, commander Commander) (*MQTTListener, e
 	return l, nil
 }
 
-func (l *MQTTListener) handleAsk(_ mqtt.Client, msg mqtt.Message) {
-	var a commands.Ask
+func (l *MQTTListener) handleDirection(_ mqtt.Client, msg mqtt.Message) {
+	var a commands.Direction
 	if err := json.Unmarshal(msg.Payload(), &a); err != nil {
-		log.Printf("Failed to unmarshal ask message: %v\n", err)
+		log.Printf("Failed to unmarshal direction message: %v\n", err)
 		return
 	}
-	log.Printf("Received ask message from Director: %s\n", a.What)
+	log.Printf("Received direction message from Director: %s\n", a.What)
 	l.enqueue(a.What)
 }
 

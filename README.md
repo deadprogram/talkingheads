@@ -11,7 +11,7 @@ A Fantastical Interaction Between Machines From The Future and Their Pet Human
 ```mermaid
 flowchart LR
 subgraph mqtt broker
-    ask
+    direction
     speak
     speaking
 end
@@ -26,8 +26,8 @@ end
 subgraph dialogue
     sayanything
 end
-director -- publish --> ask
-ask-- subscribe -->actors
+director -- publish --> direction
+direction-- subscribe -->actors
 actors-- publish -->speak
 speak-- subscribe -->actors
 speak-- subscribe -->dialogue
@@ -42,7 +42,7 @@ Actor runs on the Linux part of an Arduino UNO Q board. It is written in Go with
 ```mermaid
 flowchart LR
 subgraph mqtt broker
-    ask
+    direction
     speak
     speaking
 end
@@ -97,7 +97,7 @@ Director runs on a separate computer that is connected to the same local network
 ```mermaid
 flowchart LR
 subgraph mqtt broker
-    ask
+    direction
 end
 subgraph director
     hotmic
@@ -105,7 +105,7 @@ end
 subgraph hotmic
     whisper.cpp
 end
-director -- publish --> ask
+director -- publish --> direction
 ```
 
 ### Dialogue
@@ -139,7 +139,7 @@ subgraph The Head
     actions<-- UART -->action
 end
 subgraph mqtt broker
-    ask
+    direction
     speak
     speaking
 end
@@ -176,7 +176,7 @@ end
 subgraph hotmic
     whisper.cpp
 end
-director -- publish --> ask
+director -- publish --> direction
 ```
 
 ## Models

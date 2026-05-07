@@ -18,7 +18,7 @@ One of `--model-url` or `--model-path` is required.
 | `--model-path` | `-p` | | Path to a pre-downloaded model file |
 | `--script` | `-s` | | Path to a system prompt file (repeatable; files are concatenated in order) |
 | `--server` | `-b` | | MQTT broker URL (e.g. `tcp://localhost:1883`); enables MQTT mode |
-| `--name` | `-n` | `actor` | Actor name used for MQTT topics `ask/<name>` and `speak/<name>` |
+| `--name` | `-n` | `actor` | Actor name used for MQTT topics `direction/<name>` and `speak/<name>` |
 | `--serial` | | | Serial port for sending action commands to the microcontroller (e.g. `/dev/ttyACM0`) |
 | `--baud` | | `9600` | Baud rate for the serial port |
 
@@ -43,7 +43,7 @@ Pre-built scripts live in the `scripts/` directory at the repo root:
 **Interactive (default)** — reads input from stdin, prints responses to stdout.
 
 **MQTT** — set `--server` to connect to an MQTT broker. The actor subscribes to
-`ask/<name>` for direct prompts, `speak/#` to hear other actors, and
+`direction/<name>` for direct prompts, `speak/#` to hear other actors, and
 `speaking/<name>` to receive playback notifications from Dialogue. It publishes
 its responses to `speak/<name>`. Payloads use the JSON formats defined in
 `pkg/commands`.

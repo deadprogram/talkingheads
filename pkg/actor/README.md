@@ -68,7 +68,7 @@ All payloads use the JSON types from `pkg/commands`.
 
 | Topic | Direction | Description |
 |---|---|---|
-| `ask/<name>` | subscribe | Direct question from the Director |
+| `direction/<name>` | subscribe | Direct question from the Director |
 | `speak/#` | subscribe | Hear what other Actors say |
 | `speaking/<name>` | subscribe | Notifications from Dialogue when this Actor's voice starts or stops playing |
 | `speak/<name>` | publish | Publish the Actor's response |

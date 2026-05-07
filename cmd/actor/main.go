@@ -58,7 +58,7 @@ func main() {
 			},
 			&cli.StringFlag{
 				Name:    "name",
-				Usage:   "actor name used for MQTT topics ask/<name> and speak/<name>",
+				Usage:   "actor name used for MQTT topics direction/<name> and speak/<name>",
 				Value:   "actor",
 				Aliases: []string{"n"},
 			},
@@ -225,7 +225,7 @@ func run(c *cli.Context) error {
 		}()
 		moreFunc = ml.MoreFunc()
 		outputFunc = ml.OutputFunc()
-		log.Printf("MQTT mode: listening on ask/%s, publishing to speak/%s\n", name, name)
+		log.Printf("MQTT mode: listening on direction/%s, publishing to speak/%s\n", name, name)
 	} else {
 		scanner := bufio.NewScanner(os.Stdin)
 		moreFunc = func(conversation *[]message.Message) {
