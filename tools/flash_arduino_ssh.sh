@@ -16,7 +16,8 @@ TARGET_USER="${4:-arduino}"
 TARGET="$TARGET_USER@$TARGET_HOST"
 HEX_OUTPUT_PATH="${PROGRAM_NAME%.*}.hex"
 echo "Building firmware from source '$SOURCE_PATH'..."
-if ! tinygo build -o "$HEX_OUTPUT_PATH" -target=arduino-uno-q "$SOURCE_PATH"; then
+cd $SOURCE_PATH
+if ! tinygo build -o "$HEX_OUTPUT_PATH" -size short -target=arduino-uno-q -tags feetech .; then
     echo "Error: Failed to build firmware from $SOURCE_PATH"
     exit 1
 fi
