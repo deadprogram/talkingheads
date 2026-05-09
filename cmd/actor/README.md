@@ -34,6 +34,7 @@ One of `--model-url` or `--model-path` is required.
 | `--freq-penalty` | `0.0` | Penalise tokens by frequency (`0.0` disables) |
 | `--presence-penalty` | `0.0` | Penalise tokens by presence (`0.0` disables) |
 | `--dry-multiplier` | `0.0` | DRY repetition penalty multiplier (`0.0` disables) |
+| `--max-sentences` | `0` | Cap the number of sentences spoken per turn (`0` = unlimited) |
 
 ## System prompts
 

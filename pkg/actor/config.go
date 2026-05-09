@@ -31,6 +31,7 @@ const (
 	DefaultBatchSize       = uint32(0)    // 0 = use llama.cpp default
 	DefaultUBatchSize      = uint32(0)    // 0 = use llama.cpp default
 	DefaultPauseInterval   = 3            // seconds between repeated pause words
+	DefaultMaxSentences    = 0            // 0 = unlimited
 )
 
 // Config holds the tunable parameters for an Actor.
@@ -84,6 +85,10 @@ type Config struct {
 	// PauseInterval is the number of seconds between repeated pause words while
 	// waiting for the model to produce its first token. Defaults to DefaultPauseInterval.
 	PauseInterval int
+	// MaxSentences caps the number of sentences spoken per turn. Sentences
+	// beyond the limit are dropped before being emitted to outputFunc.
+	// 0 = unlimited.
+	MaxSentences int
 }
 
 // DefaultConfig returns a Config populated with sensible defaults.
@@ -107,5 +112,6 @@ func DefaultConfig() Config {
 		Verbose:         false,
 		PauseWords:      defaultPauseWords,
 		PauseInterval:   DefaultPauseInterval,
+		MaxSentences:    DefaultMaxSentences,
 	}
 }

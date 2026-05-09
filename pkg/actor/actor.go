@@ -673,6 +673,7 @@ generateLoop:
 		var hadText bool
 		var spokenText string
 		if spokenText = stripActorMarkup(text); spokenText != "" && a.outputFunc != nil {
+			spokenText = truncateToSentences(spokenText, a.cfg.MaxSentences)
 			remaining := flushSentences(spokenText, a.outputFunc)
 			if remaining != "" {
 				a.outputFunc(remaining)
@@ -684,6 +685,7 @@ generateLoop:
 
 	content := stripActorMarkup(text)
 	if content != "" && a.outputFunc != nil {
+		content = truncateToSentences(content, a.cfg.MaxSentences)
 		remaining := flushSentences(content, a.outputFunc)
 		if remaining != "" {
 			a.outputFunc(remaining)
@@ -857,4 +859,27 @@ func flushSentences(buf string, fn func(string)) string {
 		buf = strings.TrimLeft(buf[idx+1:], " \n\t")
 	}
 	return buf
+}
+
+// truncateToSentences returns s truncated to at most max complete sentences
+// (delimited by '.', '!' or '?' followed by whitespace or end-of-string). When
+// max <= 0, s is returned unchanged. Any partial trailing sentence beyond the
+// limit is dropped.
+func truncateToSentences(s string, max int) string {
+	if max <= 0 {
+		return s
+	}
+	count := 0
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if c == '.' || c == '!' || c == '?' {
+			if i+1 >= len(s) || s[i+1] == ' ' || s[i+1] == '\n' || s[i+1] == '\t' {
+				count++
+				if count >= max {
+					return strings.TrimSpace(s[:i+1])
+				}
+			}
+		}
+	}
+	return s
 }

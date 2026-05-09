@@ -17,4 +17,7 @@ func TestDefaultConfig_SamplingDefaults(t *testing.T) {
 	if cfg.TopK != DefaultTopK {
 		t.Errorf("TopK: got %v, want %v", cfg.TopK, DefaultTopK)
 	}
+	if cfg.MaxSentences != DefaultMaxSentences {
+		t.Errorf("MaxSentences: got %v, want %v", cfg.MaxSentences, DefaultMaxSentences)
+	}
 }

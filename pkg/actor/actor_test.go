@@ -195,3 +195,29 @@ func TestStripActorMarkup_MissingSpaceAfterPeriod(t *testing.T) {
 		}
 	}
 }
+
+// TestTruncateToSentences verifies that the helper caps the number of
+// sentences in its input and drops any partial trailing sentence.
+func TestTruncateToSentences(t *testing.T) {
+	cases := []struct {
+		name  string
+		input string
+		max   int
+		want  string
+	}{
+		{"unlimited zero", "One. Two. Three.", 0, "One. Two. Three."},
+		{"unlimited negative", "One. Two. Three.", -1, "One. Two. Three."},
+		{"cap to one", "One. Two. Three.", 1, "One."},
+		{"cap to two", "One. Two. Three.", 2, "One. Two."},
+		{"cap above count", "One. Two.", 5, "One. Two."},
+		{"mixed terminators", "Hi! How are you? I am fine.", 2, "Hi! How are you?"},
+		{"drop partial trailing", "Done. And then", 1, "Done."},
+		{"no terminator", "incomplete sentence", 3, "incomplete sentence"},
+	}
+	for _, c := range cases {
+		got := truncateToSentences(c.input, c.max)
+		if got != c.want {
+			t.Errorf("%s: truncateToSentences(%q, %d) = %q, want %q", c.name, c.input, c.max, got, c.want)
+		}
+	}
+}

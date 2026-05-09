@@ -151,6 +151,11 @@ func main() {
 				Usage: "seconds between repeated pause words while waiting for the model's first token (0 = use default)",
 				Value: actor.DefaultPauseInterval,
 			},
+			&cli.IntFlag{
+				Name:  "max-sentences",
+				Usage: "maximum number of sentences spoken per turn; sentences beyond the limit are dropped (0 = unlimited)",
+				Value: actor.DefaultMaxSentences,
+			},
 			&cli.BoolFlag{
 				Name:  "verbose",
 				Usage: "enable verbose logging for debugging",
@@ -238,6 +243,7 @@ func run(c *cli.Context) error {
 	cfg.PresencePenalty = float32(c.Float64("presence-penalty"))
 	cfg.DryMultiplier = float32(c.Float64("dry-multiplier"))
 	cfg.PauseInterval = c.Int("pause-interval")
+	cfg.MaxSentences = c.Int("max-sentences")
 	cfg.Verbose = verbose
 
 	if server != "" {
