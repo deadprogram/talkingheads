@@ -23,7 +23,7 @@ type HeadLED struct {
 
 // NewHeadLED returns a new HeadLED.
 func NewHeadLED() *HeadLED {
-	neo := machine.D4
+	neo := machine.D2
 	neo.Configure(machine.PinConfig{Mode: machine.PinOutput})
 	v := ws2812.New(neo)
 

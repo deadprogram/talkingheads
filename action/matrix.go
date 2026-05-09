@@ -105,7 +105,7 @@ func (m *Matrix) drawPulse() {
 	}
 
 	const refreshes = 64 // redraws per frame for brightness
-	const frameDelay = 10 * time.Millisecond
+	const frameDelay = 20 * time.Millisecond
 
 	step := 0
 	for {

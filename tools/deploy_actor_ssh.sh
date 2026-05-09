@@ -24,7 +24,11 @@ fi
 
 LOCAL_FILE="$OUTPUT_PATH"
 FILE_NAME=$(basename "$LOCAL_FILE")
-TARGET_FILE_PATH="/home/arduino/$FILE_NAME"
+TARGET_FILE_PATH="~/talkingheads/$FILE_NAME"
+
+# Ensure target directories exist
+echo "Ensuring remote directories exist..."
+ssh $ALLOW_SSH_AUTH_WITH_PASSWORD "$TARGET" "mkdir -p ~/talkingheads/scripts"
 
 # 2. Upload the Actor file
 echo "Uploading program '$FILE_NAME'..."
@@ -40,7 +44,7 @@ if [ -d "$SCRIPT_DIR" ]; then
     for script in "$SCRIPT_DIR"/*.md; do
         if [ -f "$script" ]; then
             SCRIPT_NAME=$(basename "$script")
-            TARGET_SCRIPT_PATH="/home/arduino/scripts/$SCRIPT_NAME"
+            TARGET_SCRIPT_PATH="~/talkingheads/scripts/$SCRIPT_NAME"
             echo "Uploading script '$SCRIPT_NAME'..."
             if ! scp $ALLOW_SSH_AUTH_WITH_PASSWORD "$script" "$TARGET:$TARGET_SCRIPT_PATH"; then
                 echo "Error: Failed to upload $script"
