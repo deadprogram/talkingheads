@@ -20,6 +20,7 @@ var defaultPauseWords = []string{
 const (
 	DefaultTemperature     = float32(0.6)
 	DefaultTopP            = float32(0.95)
+	DefaultMinP            = float32(0.05)
 	DefaultTopK            = int32(20)
 	DefaultMaxTokens       = 2048
 	DefaultContextSize     = 4096
@@ -36,6 +37,7 @@ const (
 type Config struct {
 	Temperature float32
 	TopP        float32
+	MinP        float32
 	TopK        int32
 	MaxTokens   int
 	ContextSize uint32
@@ -89,6 +91,7 @@ func DefaultConfig() Config {
 	return Config{
 		Temperature:     DefaultTemperature,
 		TopP:            DefaultTopP,
+		MinP:            DefaultMinP,
 		TopK:            DefaultTopK,
 		MaxTokens:       DefaultMaxTokens,
 		ContextSize:     DefaultContextSize,

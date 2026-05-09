@@ -81,6 +81,11 @@ func main() {
 				Usage: "top-p (nucleus) sampling threshold",
 				Value: float64(actor.DefaultTopP),
 			},
+			&cli.Float64Flag{
+				Name:  "min-p",
+				Usage: "min-p sampling threshold (minimum probability relative to the most likely token; 0.0 = disabled)",
+				Value: float64(actor.DefaultMinP),
+			},
 			&cli.IntFlag{
 				Name:  "top-k",
 				Usage: "top-k sampling limit",
@@ -219,6 +224,7 @@ func run(c *cli.Context) error {
 	cfg := actor.DefaultConfig()
 	cfg.Temperature = float32(c.Float64("temperature"))
 	cfg.TopP = float32(c.Float64("top-p"))
+	cfg.MinP = float32(c.Float64("min-p"))
 	cfg.TopK = int32(c.Int("top-k"))
 	cfg.MaxTokens = c.Int("max-tokens")
 	cfg.ContextSize = uint32(c.Int("context-size"))

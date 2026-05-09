@@ -117,6 +117,7 @@ func NewActor(modelPath string, cfg Config, commander Commander, moreFunc func(c
 	sp := llama.DefaultSamplerParams()
 	sp.Temp = cfg.Temperature
 	sp.TopP = cfg.TopP
+	sp.MinP = cfg.MinP
 	sp.TopK = cfg.TopK
 	sp.PenaltyRepeat = cfg.RepeatPenalty
 	sp.PenaltyFreq = cfg.FreqPenalty

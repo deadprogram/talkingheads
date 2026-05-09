@@ -22,6 +22,19 @@ One of `--model-url` or `--model-path` is required.
 | `--serial` | | | Serial port for sending action commands to the microcontroller (e.g. `/dev/ttyACM0`) |
 | `--baud` | | `9600` | Baud rate for the serial port |
 
+### Sampling flags
+
+| Flag | Default | Description |
+|---|---|---|
+| `--temperature` | `0.6` | Sampling temperature |
+| `--top-p` | `0.95` | Top-P (nucleus) sampling threshold |
+| `--min-p` | `0.05` | Min-P sampling threshold (minimum probability relative to the most likely token; `0.0` disables) |
+| `--top-k` | `20` | Top-K sampling limit |
+| `--repeat-penalty` | `1.0` | Penalise recently-seen tokens (`1.0` disables) |
+| `--freq-penalty` | `0.0` | Penalise tokens by frequency (`0.0` disables) |
+| `--presence-penalty` | `0.0` | Penalise tokens by presence (`0.0` disables) |
+| `--dry-multiplier` | `0.0` | DRY repetition penalty multiplier (`0.0` disables) |
+
 ## System prompts
 
 The `--script` flag accepts a path to a Markdown file and can be repeated to
