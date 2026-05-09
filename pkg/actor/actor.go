@@ -796,6 +796,12 @@ var stageDirectionRE = regexp.MustCompile(`\([^)]*\s[^)]*\)`)
 //	{"response": "value"  (no closing brace — truncated generation)
 var jsonResponseRE = regexp.MustCompile(`\{\s*"response"\s*:\s*"((?:[^"]|\\")*)"`)
 
+// missingSpaceAfterPeriodRE matches a lowercase letter, single period, then an
+// uppercase letter (e.g. "things.I" or "world.Then"). Used to insert the
+// missing inter-sentence space without disturbing decimals ("3.14"),
+// ellipses ("...") or abbreviations ("e.g.", "U.S.A.").
+var missingSpaceAfterPeriodRE = regexp.MustCompile(`([a-z])\.([A-Z])`)
+
 // stripActorMarkup calls message.StripMarkup and then removes artefacts that
 // are specific to the talkingheads actor (orphaned angle parameters, stage
 // directions). This keeps the yzma library general-purpose.
@@ -803,6 +809,7 @@ func stripActorMarkup(s string) string {
 	s = message.StripMarkup(s)
 	s = orphanAngleRE.ReplaceAllString(s, "")
 	s = stageDirectionRE.ReplaceAllString(s, "")
+	s = missingSpaceAfterPeriodRE.ReplaceAllString(s, "$1. $2")
 	s = strings.TrimSpace(s)
 	// Some fine-tuned models (e.g. gemma-3-270M-finetune) wrap every reply in
 	// a JSON envelope: {"response": "..."} — possibly without a closing brace
@@ -813,14 +820,14 @@ func stripActorMarkup(s string) string {
 			var env map[string]any
 			if err := json.Unmarshal([]byte(s[:end+1]), &env); err == nil {
 				if resp, ok := env["response"].(string); ok && resp != "" {
-					return strings.TrimSpace(resp)
+					return missingSpaceAfterPeriodRE.ReplaceAllString(strings.TrimSpace(resp), "$1. $2")
 				}
 			}
 		}
 		// Fallback: incomplete JSON — extract with a regex so truncated output
 		// like {"response": "text without closing brace is still unwrapped.
 		if m := jsonResponseRE.FindStringSubmatch(s); len(m) == 2 && m[1] != "" {
-			return strings.TrimSpace(m[1])
+			return missingSpaceAfterPeriodRE.ReplaceAllString(strings.TrimSpace(m[1]), "$1. $2")
 		}
 	}
 	return s

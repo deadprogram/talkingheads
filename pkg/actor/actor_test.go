@@ -166,3 +166,32 @@ func TestNormalizeToolName(t *testing.T) {
 		}
 	}
 }
+
+// TestStripActorMarkup_MissingSpaceAfterPeriod verifies that a single period
+// glued to a following capitalised word is split with a space, while decimals,
+// ellipses and abbreviations are left alone.
+func TestStripActorMarkup_MissingSpaceAfterPeriod(t *testing.T) {
+	cases := []struct {
+		input string
+		want  string
+	}{
+		{"I like things.I really do", "I like things. I really do"},
+		{"Hello world.Then goodbye", "Hello world. Then goodbye"},
+		{"one.Two.Three", "one. Two. Three"},
+		// Untouched: decimals, ellipses, abbreviations, lowercase follow.
+		{"pi is 3.14", "pi is 3.14"},
+		{"wait...okay", "wait...okay"},
+		{"e.g. this", "e.g. this"},
+		{"U.S.A. today", "U.S.A. today"},
+		{"already. spaced", "already. spaced"},
+		{"end of sentence.", "end of sentence."},
+		// JSON-wrapped responses are unwrapped and still get the fix.
+		{`{"response": "hello.World"}`, "hello. World"},
+	}
+	for _, c := range cases {
+		got := stripActorMarkup(c.input)
+		if got != c.want {
+			t.Errorf("stripActorMarkup(%q) = %q, want %q", c.input, got, c.want)
+		}
+	}
+}
