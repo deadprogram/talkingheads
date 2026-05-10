@@ -798,11 +798,15 @@ var stageDirectionRE = regexp.MustCompile(`\([^)]*\s[^)]*\)`)
 //	{"response": "value"  (no closing brace — truncated generation)
 var jsonResponseRE = regexp.MustCompile(`\{\s*"response"\s*:\s*"((?:[^"]|\\")*)"`)
 
-// missingSpaceAfterPeriodRE matches a lowercase letter, single period, then an
-// uppercase letter (e.g. "things.I" or "world.Then"). Used to insert the
-// missing inter-sentence space without disturbing decimals ("3.14"),
-// ellipses ("...") or abbreviations ("e.g.", "U.S.A.").
-var missingSpaceAfterPeriodRE = regexp.MustCompile(`([a-z])\.([A-Z])`)
+// missingSpaceAfterPeriodRE matches a lowercase word (two or more letters),
+// a single period, then a following letter — uppercase or lowercase
+// (e.g. "things.I", "world.Then", "done.then"). Used to insert the missing
+// inter-sentence space without disturbing decimals ("3.14"), ellipses
+// ("...") or single-letter abbreviations ("e.g.", "i.e.", "U.S.A."). The
+// two-letter minimum before the period is what protects the abbreviations
+// and the trailing dot of an ellipsis (which is preceded by another dot,
+// not a letter).
+var missingSpaceAfterPeriodRE = regexp.MustCompile(`([a-z]{2,})\.([A-Za-z])`)
 
 // stripActorMarkup calls message.StripMarkup and then removes artefacts that
 // are specific to the talkingheads actor (orphaned angle parameters, stage
