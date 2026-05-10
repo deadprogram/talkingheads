@@ -815,6 +815,10 @@ func stripActorMarkup(s string) string {
 	s = message.StripMarkup(s)
 	s = orphanAngleRE.ReplaceAllString(s, "")
 	s = stageDirectionRE.ReplaceAllString(s, "")
+	// Replace newlines with spaces so that adjacent words separated only by a
+	// line break (e.g. after a stripped markdown bullet) don't get glued
+	// together when downstream code collapses or removes other whitespace.
+	s = strings.ReplaceAll(s, "\n", " ")
 	s = missingSpaceAfterPeriodRE.ReplaceAllString(s, "$1. $2")
 	s = strings.TrimSpace(s)
 	// Some fine-tuned models (e.g. gemma-3-270M-finetune) wrap every reply in

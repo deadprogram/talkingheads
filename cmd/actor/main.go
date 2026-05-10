@@ -234,6 +234,17 @@ func run(c *cli.Context) error {
 		log.Printf("Serial mode: sending action commands to %s at %d baud\n", serialPort, baudRate)
 	}
 
+	if theme != "" {
+		if commander == nil {
+			commander = &actor.LogCommander{}
+		}
+		if err := commander.Send("theme " + theme); err != nil {
+			log.Printf("failed to set theme %q: %v", theme, err)
+		} else {
+			log.Printf("Theme set to %s", theme)
+		}
+	}
+
 	var moreFunc func(*[]message.Message)
 	var outputFunc func(string)
 
@@ -300,17 +311,6 @@ func run(c *cli.Context) error {
 		return cli.Exit(fmt.Sprintf("failed to create actor: %v", err), 1)
 	}
 	defer a.Close()
-
-	if theme != "" {
-		if commander == nil {
-			commander = &actor.LogCommander{}
-		}
-		if err := commander.Send("theme " + theme); err != nil {
-			log.Printf("failed to set theme %q: %v", theme, err)
-		} else {
-			log.Printf("Theme set to %s", theme)
-		}
-	}
 
 	fmt.Println("Actor ready. Use Ctrl+C or Ctrl+D to quit.")
 
