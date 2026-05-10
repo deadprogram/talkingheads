@@ -17,6 +17,7 @@ require (
 	cloud.google.com/go/longrunning v0.11.0 // indirect
 	cloud.google.com/go/texttospeech v1.19.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
+	github.com/common-nighthawk/go-figure v0.0.0-20210622060536-734e95fb86be // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.2 // indirect
 	github.com/deadprogram/sam v0.0.0-20260501115511-7c6eedfba6c6 // indirect
 	github.com/ebitengine/oto/v3 v3.4.0 // indirect

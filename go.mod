@@ -48,6 +48,7 @@ require (
 	github.com/bgentry/go-netrc v0.0.0-20140422174119-9fd32a8b3d3d // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/cncf/xds/go v0.0.0-20260202195803-dba9d589def2 // indirect
+	github.com/common-nighthawk/go-figure v0.0.0-20210622060536-734e95fb86be // indirect
 	github.com/creack/goselect v0.1.2 // indirect
 	github.com/deadprogram/sam v0.0.0-20260501115511-7c6eedfba6c6 // indirect
 	github.com/ebitengine/oto/v3 v3.4.0 // indirect

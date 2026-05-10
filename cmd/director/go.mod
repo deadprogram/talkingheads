@@ -11,6 +11,7 @@ require (
 )
 
 require (
+	github.com/common-nighthawk/go-figure v0.0.0-20210622060536-734e95fb86be // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.2 // indirect
 	github.com/ggerganov/whisper.cpp/bindings/go v0.0.0-20260420051257-fc674574ca27 // indirect
 	github.com/gordonklaus/portaudio v0.0.0-20260203164431-765aa7dfa631 // indirect

@@ -1,11 +1,5 @@
 package main
 
-const banner = `
-######  ###    #    #       #######  #####  #     # #######
-#     #  #    # #   #       #     # #     # #     # #      
-#     #  #   #   #  #       #     # #       #     # #      
-#     #  #  #     # #       #     # #  #### #     # #####  
-#     #  #  ####### #       #     # #     # #     # #      
-#     #  #  #     # #       #     # #     # #     # #      
-######  ### #     # ####### #######  #####   #####  #######
-`
+import bannerpkg "github.com/deadprogram/talkingheads/pkg/banner"
+
+var banner = bannerpkg.Generate("DIALOGUE")

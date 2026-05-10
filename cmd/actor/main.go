@@ -172,7 +172,8 @@ func main() {
 
 func run(c *cli.Context) error {
 	fmt.Print("\033[H\033[2J")
-	fmt.Print(banner)
+	name := c.String("name")
+	fmt.Print(makeBanner(name))
 	fmt.Println()
 
 	modelURL := c.String("model-url")
@@ -181,7 +182,6 @@ func run(c *cli.Context) error {
 	verbose := c.Bool("verbose")
 	scriptFiles := c.StringSlice("script")
 	server := c.String("server")
-	name := c.String("name")
 	serialPort := c.String("serial")
 	baudRate := c.Int("baud")
 
