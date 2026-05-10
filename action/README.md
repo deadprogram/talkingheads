@@ -41,3 +41,11 @@ Causes the head to move a very small amount right or left one time per second wh
 ### `stop`
 
 Causes the head to stop moving.
+
+### `theme [colorname]`
+
+Sets the personality color used by the head LED and matrix at runtime. Valid colors are `red`, `green`, `blue`, `purple`, `orange`, and `yellow`. The change takes effect on the next lighting tick.
+
+```
+theme green
+```

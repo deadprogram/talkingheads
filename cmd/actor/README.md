@@ -21,6 +21,7 @@ One of `--model-url` or `--model-path` is required.
 | `--name` | `-n` | `actor` | Actor name used for MQTT topics `direction/<name>` and `speak/<name>` |
 | `--serial` | | | Serial port for sending action commands to the microcontroller (e.g. `/dev/ttyACM0`) |
 | `--baud` | | `9600` | Baud rate for the serial port |
+| `--theme` | | | Personality color sent to the action firmware on startup (`red`, `green`, `blue`, `purple`, `orange`, `yellow`) |
 
 ### Sampling flags
 

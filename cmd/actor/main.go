@@ -71,6 +71,10 @@ func main() {
 				Usage: "baud rate for the serial port",
 				Value: 9600,
 			},
+			&cli.StringFlag{
+				Name:  "theme",
+				Usage: "personality color sent to the action firmware on startup (red, green, blue, purple, orange, yellow)",
+			},
 			&cli.Float64Flag{
 				Name:  "temperature",
 				Usage: "sampling temperature",
@@ -184,6 +188,7 @@ func run(c *cli.Context) error {
 	server := c.String("server")
 	serialPort := c.String("serial")
 	baudRate := c.Int("baud")
+	theme := strings.ToLower(strings.TrimSpace(c.String("theme")))
 
 	if len(modelURL) == 0 {
 		return cli.Exit("--model-url is required", 1)
@@ -196,6 +201,12 @@ func run(c *cli.Context) error {
 
 	if len(libPath) == 0 {
 		return cli.Exit("library path is required (set with --libpath or YZMA_LIB environment variable)", 1)
+	}
+
+	// Propagate the resolved library path to YZMA_LIB so downstream code
+	// (e.g. actor.NewActor) loads llama.cpp from the same location.
+	if err := os.Setenv("YZMA_LIB", libPath); err != nil {
+		return cli.Exit(fmt.Sprintf("failed to set YZMA_LIB: %v", err), 1)
 	}
 
 	if err := actor.EnsureInstall(libPath, processor, updateInstall); err != nil {
@@ -289,6 +300,17 @@ func run(c *cli.Context) error {
 		return cli.Exit(fmt.Sprintf("failed to create actor: %v", err), 1)
 	}
 	defer a.Close()
+
+	if theme != "" {
+		if commander == nil {
+			commander = &actor.LogCommander{}
+		}
+		if err := commander.Send("theme " + theme); err != nil {
+			log.Printf("failed to set theme %q: %v", theme, err)
+		} else {
+			log.Printf("Theme set to %s", theme)
+		}
+	}
 
 	fmt.Println("Actor ready. Use Ctrl+C or Ctrl+D to quit.")
 

@@ -27,6 +27,7 @@ const (
 	CommandSpeak     = "speak"
 	CommandHeadShake = "headshake"
 	CommandStop      = "stop"
+	CommandTheme     = "theme"
 
 	// State constants for controlling the behavior of the main loop.
 	StateLooking     = "looking"
@@ -53,6 +54,15 @@ func processCommand(cmd string) error {
 		}
 		targetAngle = a
 		setMode(stateForCommand(command))
+	case CommandTheme:
+		if len(parts) != 2 {
+			return errColorRequired
+		}
+		name := strings.ToLower(strings.TrimSpace(parts[1]))
+		if !isValidColor(name) {
+			return errInvalidColor
+		}
+		PersonalityColor = name
 	case CommandWait, CommandSpeak, CommandHeadShake, CommandStop:
 		setMode(stateForCommand(command))
 	default:

@@ -14,6 +14,14 @@ var (
 	black  = color.RGBA{R: 0x00, G: 0x00, B: 0x00}
 )
 
+func isValidColor(name string) bool {
+	switch name {
+	case "red", "green", "blue", "purple", "orange", "yellow":
+		return true
+	}
+	return false
+}
+
 func personalityColor() color.RGBA {
 	switch PersonalityColor {
 	case "red":

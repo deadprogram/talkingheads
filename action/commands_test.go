@@ -146,3 +146,41 @@ func TestMovement_AtTarget(t *testing.T) {
 		t.Errorf("movement(90, 90) = %d, want 90", result)
 	}
 }
+
+func TestProcessCommand_Theme(t *testing.T) {
+	resetState()
+	prev := PersonalityColor
+	defer func() { PersonalityColor = prev }()
+	if err := processCommand("theme green"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if PersonalityColor != "green" {
+		t.Errorf("PersonalityColor = %q, want %q", PersonalityColor, "green")
+	}
+}
+
+func TestProcessCommand_ThemeMixedCase(t *testing.T) {
+	resetState()
+	prev := PersonalityColor
+	defer func() { PersonalityColor = prev }()
+	if err := processCommand("theme  Purple "); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if PersonalityColor != "purple" {
+		t.Errorf("PersonalityColor = %q, want %q", PersonalityColor, "purple")
+	}
+}
+
+func TestProcessCommand_ThemeMissingColor(t *testing.T) {
+	resetState()
+	if err := processCommand("theme"); err != errColorRequired {
+		t.Errorf("err = %v, want errColorRequired", err)
+	}
+}
+
+func TestProcessCommand_ThemeInvalidColor(t *testing.T) {
+	resetState()
+	if err := processCommand("theme chartreuse"); err != errInvalidColor {
+		t.Errorf("err = %v, want errInvalidColor", err)
+	}
+}
