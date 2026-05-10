@@ -5,17 +5,16 @@
 ALLOW_SSH_AUTH_WITH_PASSWORD="-o PreferredAuthentications=publickey,password -o PasswordAuthentication=yes"
 
 # Ensure a source argument was provided
-if [ "$#" -lt 4 ] || [ "$#" -gt 5 ]; then
-    echo "Usage: $0 <path_to_source> <name_of_program> <script_dir> <ip_address_or_hostname> [username]"
+if [ "$#" -lt 3 ] || [ "$#" -gt 4 ]; then
+    echo "Usage: $0 <path_to_source> <name_of_program> <ip_address_or_hostname> [username]"
     exit 1
 fi
 
 # 1. Use go to build the program
 SOURCE_PATH="$1"
 PROGRAM_NAME="$2"
-SCRIPT_DIR="$3"
-TARGET_HOST="$4"
-TARGET_USER="${5:-arduino}"
+TARGET_HOST="$3"
+TARGET_USER="${4:-arduino}"
 TARGET="$TARGET_USER@$TARGET_HOST"
 OUTPUT_PATH="${PROGRAM_NAME%.*}"
 echo "Building program from source '$SOURCE_PATH'..."
@@ -42,7 +41,7 @@ fi
 
 # 3. Upload the scripts for the Actor.
 echo "Uploading scripts for program '$FILE_NAME'..."
-SCRIPT_DIR="$3"
+SCRIPT_DIR="$(dirname "$SOURCE_PATH")/scripts"
 if [ -d "$SCRIPT_DIR" ]; then
     for script in "$SCRIPT_DIR"/*.md; do
         if [ -f "$script" ]; then

@@ -1,6 +1,8 @@
 #!/bin/bash
 
-ALLOW_SSH_AUTH_WITH_PASSWORD="-o PreferredAuthentications=password -o PasswordAuthentication=yes"
+# Try public-key auth first (set up via tools/setup_ssh_key.sh), then fall
+# back to interactive password auth if the key isn't installed yet.
+ALLOW_SSH_AUTH_WITH_PASSWORD="-o PreferredAuthentications=publickey,password -o PasswordAuthentication=yes"
 
 # Ensure a source argument was provided
 if [ "$#" -lt 2 ] || [ "$#" -gt 3 ]; then
