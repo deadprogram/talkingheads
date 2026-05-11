@@ -152,10 +152,10 @@ func NewActor(modelPath string, cfg Config, commander Commander, moreFunc func(c
 // returned unchanged.
 func prepareConversationForTemplate(conv []message.Message, format message.Format) []message.Message {
 	if format != message.FormatGemma3 {
-		return conv
+		return coalesceSameRole(conv)
 	}
 	if len(conv) == 0 || conv[0].GetRole() != "system" {
-		return conv
+		return coalesceSameRole(conv)
 	}
 	sysContent := conv[0].GetContent()["content"].(string)
 	out := make([]message.Message, 0, len(conv))
@@ -171,7 +171,42 @@ func prepareConversationForTemplate(conv []message.Message, format message.Forma
 	}
 	if !merged {
 		// No user message to merge into; strip the system message.
-		return conv[1:]
+		return coalesceSameRole(conv[1:])
+	}
+	return coalesceSameRole(out)
+}
+
+// coalesceSameRole merges runs of consecutive plain chat messages that share
+// the same role into a single message, joining their content with a newline.
+// This is required because some chat templates (Mistral and certain Qwen
+// instruct variants) refuse to render conversations whose user/assistant turns
+// don't strictly alternate, raising errors like:
+//
+//	Conversation roles must alternate user/assistant/user/assistant/...
+//
+// Only message.Chat entries are merged; message.Tool (assistant turns with
+// tool calls) and tool-result messages are preserved verbatim because they
+// carry structured fields that cannot be concatenated as strings.
+func coalesceSameRole(conv []message.Message) []message.Message {
+	if len(conv) < 2 {
+		return conv
+	}
+	out := make([]message.Message, 0, len(conv))
+	for _, msg := range conv {
+		cur, curIsChat := msg.(message.Chat)
+		if curIsChat && len(out) > 0 {
+			if prev, prevIsChat := out[len(out)-1].(message.Chat); prevIsChat && prev.Role == cur.Role {
+				switch {
+				case prev.Content == "":
+					prev.Content = cur.Content
+				case cur.Content != "":
+					prev.Content = prev.Content + "\n" + cur.Content
+				}
+				out[len(out)-1] = prev
+				continue
+			}
+		}
+		out = append(out, msg)
 	}
 	return out
 }

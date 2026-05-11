@@ -228,3 +228,70 @@ func TestTruncateToSentences(t *testing.T) {
 		}
 	}
 }
+
+func TestCoalesceSameRole_MergesConsecutiveUsers(t *testing.T) {
+	in := []message.Message{
+		message.Chat{Role: "system", Content: "sys"},
+		message.Chat{Role: "user", Content: "qwentin says: hi"},
+		message.Chat{Role: "user", Content: "phineas, please respond"},
+		message.Chat{Role: "assistant", Content: "ok"},
+		message.Chat{Role: "user", Content: "another heard"},
+		message.Chat{Role: "user", Content: "next direction"},
+	}
+	out := coalesceSameRole(in)
+	if len(out) != 4 {
+		t.Fatalf("expected 4 messages, got %d", len(out))
+	}
+	if out[1].GetRole() != "user" ||
+		out[1].GetContent()["content"].(string) != "qwentin says: hi\nphineas, please respond" {
+		t.Errorf("first user pair not merged: %+v", out[1])
+	}
+	if out[3].GetRole() != "user" ||
+		out[3].GetContent()["content"].(string) != "another heard\nnext direction" {
+		t.Errorf("trailing user pair not merged: %+v", out[3])
+	}
+}
+
+func TestCoalesceSameRole_PreservesToolMessages(t *testing.T) {
+	tc := []message.ToolCall{{Type: "function", Function: message.ToolFunction{Name: "tool_movement"}}}
+	in := []message.Message{
+		message.Chat{Role: "user", Content: "u1"},
+		message.Tool{Role: "assistant", Content: "", ToolCalls: tc},
+		message.Chat{Role: "assistant", Content: "spoken"},
+	}
+	out := coalesceSameRole(in)
+	// The assistant Tool message and the assistant Chat message must NOT be
+	// merged — the Tool message carries structured ToolCalls.
+	if len(out) != 3 {
+		t.Fatalf("expected 3 messages, got %d", len(out))
+	}
+	if _, ok := out[1].(message.Tool); !ok {
+		t.Errorf("expected message.Tool at index 1, got %T", out[1])
+	}
+}
+
+func TestCoalesceSameRole_NoOpWhenAlternating(t *testing.T) {
+	in := []message.Message{
+		message.Chat{Role: "system", Content: "sys"},
+		message.Chat{Role: "user", Content: "u"},
+		message.Chat{Role: "assistant", Content: "a"},
+	}
+	out := coalesceSameRole(in)
+	if len(out) != 3 {
+		t.Fatalf("expected unchanged length 3, got %d", len(out))
+	}
+}
+
+func TestCoalesceSameRole_HandlesEmptyContent(t *testing.T) {
+	in := []message.Message{
+		message.Chat{Role: "user", Content: ""},
+		message.Chat{Role: "user", Content: "hello"},
+	}
+	out := coalesceSameRole(in)
+	if len(out) != 1 {
+		t.Fatalf("expected 1 message, got %d", len(out))
+	}
+	if got := out[0].GetContent()["content"].(string); got != "hello" {
+		t.Errorf("empty + non-empty merge: got %q, want %q", got, "hello")
+	}
+}
