@@ -25,6 +25,7 @@ type MQTTListener struct {
 	pauseWords map[string]bool
 	done       chan struct{}
 	closeOnce  sync.Once
+	verbose    bool
 }
 
 // NewMQTTListener connects to the broker, subscribes to "direction/<name>" for
@@ -32,7 +33,7 @@ type MQTTListener struct {
 // ready-to-use MQTTListener. If commander is nil, a LogCommander is used.
 // pauseWords is the list of filler words that should be ignored when heard
 // from other actors (they are not real content and should not enter context).
-func NewMQTTListener(name, server string, commander Commander, pauseWords []string) (*MQTTListener, error) {
+func NewMQTTListener(name, server string, commander Commander, pauseWords []string, verbose bool) (*MQTTListener, error) {
 	if commander == nil {
 		commander = &LogCommander{}
 	}
@@ -41,7 +42,9 @@ func NewMQTTListener(name, server string, commander Commander, pauseWords []stri
 	options.SetClientID("actor-" + name)
 	options.KeepAlive = 300
 
-	log.Printf("Connecting to MQTT broker at %s\n", server)
+	if verbose {
+		log.Printf("Connecting to MQTT broker at %s\n", server)
+	}
 	client := mqtt.NewClient(options)
 	token := client.Connect()
 	if token.Wait() && token.Error() != nil {
@@ -60,19 +63,29 @@ func NewMQTTListener(name, server string, commander Commander, pauseWords []stri
 		heard:      make(chan string, 64),
 		pauseWords: pauseWordSet,
 		done:       make(chan struct{}),
+		verbose:    verbose,
 	}
 
 	if err := subscribe(client, "direction/"+name, l.handleDirection); err != nil {
 		client.Disconnect(250)
 		return nil, err
 	}
+	if verbose {
+		log.Printf("Subscribed to direction/%s\n", name)
+	}
 	if err := subscribe(client, "speak/#", l.handleSpeak); err != nil {
 		client.Disconnect(250)
 		return nil, err
 	}
+	if verbose {
+		log.Printf("Subscribed to speak/#\n")
+	}
 	if err := subscribe(client, "speaking/"+name, l.handleSpeakingStatus); err != nil {
 		client.Disconnect(250)
 		return nil, err
+	}
+	if verbose {
+		log.Printf("Subscribed to speaking/%s\n", name)
 	}
 
 	return l, nil
@@ -84,7 +97,6 @@ func subscribe(client mqtt.Client, topic string, handler mqtt.MessageHandler) er
 	if token.Wait() && token.Error() != nil {
 		return token.Error()
 	}
-	log.Printf("Subscribed to %s\n", topic)
 	return nil
 }
 
@@ -94,7 +106,9 @@ func (l *MQTTListener) handleDirection(_ mqtt.Client, msg mqtt.Message) {
 		log.Printf("Failed to unmarshal direction message: %v\n", err)
 		return
 	}
-	log.Printf("Received direction message from Director: %s\n", a.What)
+	if l.verbose {
+		log.Printf("Received direction message from Director: %s\n", a.What)
+	}
 	l.enqueue(a.What)
 }
 
@@ -107,11 +121,15 @@ func (l *MQTTListener) handleSpeakingStatus(_ mqtt.Client, msg mqtt.Message) {
 	switch s.Status {
 	case commands.StatusSpeaking:
 		if err := l.commander.Send("speak"); err != nil {
-			log.Printf("failed to send speak command: %v\n", err)
+			if l.verbose {
+				log.Printf("failed to send speak command: %v\n", err)
+			}
 		}
 	case commands.StatusStopped:
 		if err := l.commander.Send("stop"); err != nil {
-			log.Printf("failed to send stop command: %v\n", err)
+			if l.verbose {
+				log.Printf("failed to send stop command: %v\n", err)
+			}
 		}
 	}
 }
@@ -130,7 +148,9 @@ func (l *MQTTListener) handleSpeak(_ mqtt.Client, msg mqtt.Message) {
 	if l.pauseWords[s.What] {
 		return
 	}
-	log.Printf("Heard %s say: %s\n", s.Who, s.What)
+	if l.verbose {
+		log.Printf("Heard %s say: %s\n", s.Who, s.What)
+	}
 	l.enqueueHeard(s.Who + " says: " + s.What)
 }
 

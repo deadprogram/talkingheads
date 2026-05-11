@@ -239,9 +239,13 @@ func run(c *cli.Context) error {
 			commander = &actor.LogCommander{}
 		}
 		if err := commander.Send("theme " + theme); err != nil {
-			log.Printf("failed to set theme %q: %v", theme, err)
+			if verbose {
+				log.Printf("failed to set theme %q: %v", theme, err)
+			}
 		} else {
-			log.Printf("Theme set to %s", theme)
+			if verbose {
+				log.Printf("set theme to %s", theme)
+			}
 		}
 	}
 
@@ -269,7 +273,7 @@ func run(c *cli.Context) error {
 	cfg.Verbose = verbose
 
 	if server != "" {
-		ml, err := actor.NewMQTTListener(name, server, commander, cfg.PauseWords)
+		ml, err := actor.NewMQTTListener(name, server, commander, cfg.PauseWords, verbose)
 		if err != nil {
 			return cli.Exit(fmt.Sprintf("failed to connect to MQTT broker: %v", err), 1)
 		}

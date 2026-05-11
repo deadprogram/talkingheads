@@ -368,14 +368,18 @@ func (a *Actor) handleToolCalls(ctx context.Context, conversation *[]message.Mes
 		}
 		consecutiveToolOnlyTurns++
 		if consecutiveToolOnlyTurns >= maxConsecutiveToolOnlyTurns {
-			log.Printf("breaking tool-call loop after %d consecutive tool-only turns", consecutiveToolOnlyTurns)
+			if a.cfg.Verbose {
+				log.Printf("breaking tool-call loop after %d consecutive tool-only turns", consecutiveToolOnlyTurns)
+			}
 			return 0, true
 		}
 		*conversation = append(*conversation, message.Chat{
 			Role:    "user",
 			Content: "You called motion tools but included no spoken words. You MUST write your actual answer as plain text. Reply now with spoken sentences.",
 		})
-		log.Printf("tool-only turn %d/%d, nudging for verbal response", consecutiveToolOnlyTurns, maxConsecutiveToolOnlyTurns)
+		if a.cfg.Verbose {
+			log.Printf("tool-only turn %d/%d, nudging for verbal response", consecutiveToolOnlyTurns, maxConsecutiveToolOnlyTurns)
+		}
 		return consecutiveToolOnlyTurns, false
 	}
 
@@ -391,7 +395,9 @@ func (a *Actor) handleToolCalls(ctx context.Context, conversation *[]message.Mes
 	*conversation = append(*conversation, toolResults...)
 	if consecutiveToolOnlyTurns >= maxConsecutiveToolOnlyTurns {
 		// Still no text after nudge — give up and wait for new input.
-		log.Printf("breaking tool-call loop after %d consecutive tool-only turns", consecutiveToolOnlyTurns)
+		if a.cfg.Verbose {
+			log.Printf("breaking tool-call loop after %d consecutive tool-only turns", consecutiveToolOnlyTurns)
+		}
 		return 0, true
 	}
 	// Inject a user nudge so the model understands it must also
@@ -400,7 +406,9 @@ func (a *Actor) handleToolCalls(ctx context.Context, conversation *[]message.Mes
 		Role:    "user",
 		Content: "You called motion tools but included no spoken words. Note: calling tool_movement with command 'speak' is a head-motion cue — it is NOT a verbal response. You MUST write your actual answer as plain text outside any function blocks. Reply now with spoken sentences.",
 	})
-	log.Printf("tool-only turn %d/%d, nudging for verbal response", consecutiveToolOnlyTurns, maxConsecutiveToolOnlyTurns)
+	if a.cfg.Verbose {
+		log.Printf("tool-only turn %d/%d, nudging for verbal response", consecutiveToolOnlyTurns, maxConsecutiveToolOnlyTurns)
+	}
 	return consecutiveToolOnlyTurns, false
 }
 
@@ -490,7 +498,9 @@ func (a *Actor) generateTurn(ctx context.Context, conversation *[]message.Messag
 		maxPromptTokens := nCtx - a.cfg.MaxTokens
 		for len(tokens) > maxPromptTokens && len(*conversation) > 2 {
 			// Drop the second message (oldest non-system entry) and re-tokenize.
-			log.Println("trimming oldest message from conversation to fit context window")
+			if a.cfg.Verbose {
+				log.Println("trimming oldest message from conversation to fit context window")
+			}
 			*conversation = append((*conversation)[:1], (*conversation)[2:]...)
 			renderConv = prepareConversationForTemplate(*conversation, a.cfg.ModelFormat)
 			prompt, err = template.ApplyWithOptions(a.chatTemplate, renderConv, true, tmplOpts)
@@ -666,7 +676,9 @@ generateLoop:
 	text = strings.ReplaceAll(text, "</think>", "")
 	text = strings.TrimSpace(text)
 
-	log.Printf("raw generation: %q", text)
+	if a.cfg.Verbose {
+		log.Printf("raw generation: %q", text)
+	}
 
 	toolCalls := message.ParseToolCalls(text)
 	if len(toolCalls) > 0 {
@@ -756,7 +768,9 @@ func (a *Actor) callTools(ctx context.Context, toolCalls []message.ToolCall) []m
 			continue
 		}
 
-		log.Printf("\u001b[92m%s(%v)\u001b[0m: ", toolCall.Function.Name, toolCall.Function.Arguments)
+		if a.cfg.Verbose {
+			log.Printf("\u001b[92m%s(%v)\u001b[0m: ", toolCall.Function.Name, toolCall.Function.Arguments)
+		}
 
 		content := tool.Call(ctx, toolCall)
 		if strings.Contains(content, `"FAILED"`) {
