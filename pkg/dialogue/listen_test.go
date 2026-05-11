@@ -179,6 +179,70 @@ func TestListenUnknownVoice(t *testing.T) {
 	l.Listen()
 }
 
+func TestSayJSONRoundTrip(t *testing.T) {
+	original := commands.Say{Who: "alice", What: "hello world"}
+
+	b, err := json.Marshal(original)
+	if err != nil {
+		t.Fatalf("marshal failed: %v", err)
+	}
+
+	var decoded commands.Say
+	if err := json.Unmarshal(b, &decoded); err != nil {
+		t.Fatalf("unmarshal failed: %v", err)
+	}
+
+	if decoded.Who != original.Who {
+		t.Errorf("Who: got %q, want %q", decoded.Who, original.Who)
+	}
+	if decoded.What != original.What {
+		t.Errorf("What: got %q, want %q", decoded.What, original.What)
+	}
+}
+
+func TestHandleSayValidPayload(t *testing.T) {
+	l := &Listener{
+		whatWasSaid: make(chan commands.Speak, 1),
+		voices:      map[string]*Voice{},
+		verbose:     false,
+	}
+
+	payload, _ := json.Marshal(commands.Say{Who: "alice", What: "hello"})
+	msg := &mockMessage{payload: payload, topic: "say/alice"}
+
+	l.handleSay(nil, msg)
+
+	select {
+	case s := <-l.whatWasSaid:
+		if s.Who != "alice" {
+			t.Errorf("Who: got %q, want %q", s.Who, "alice")
+		}
+		if s.What != "hello" {
+			t.Errorf("What: got %q, want %q", s.What, "hello")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for message on channel")
+	}
+}
+
+func TestHandleSayInvalidPayload(t *testing.T) {
+	l := &Listener{
+		whatWasSaid: make(chan commands.Speak, 1),
+		voices:      map[string]*Voice{},
+		verbose:     false,
+	}
+
+	msg := &mockMessage{payload: []byte("not valid json"), topic: "say/alice"}
+	l.handleSay(nil, msg)
+
+	select {
+	case <-l.whatWasSaid:
+		t.Fatal("expected no message on channel for invalid JSON")
+	default:
+		// expected: nothing sent to channel
+	}
+}
+
 func TestPublishSpeaking_Speaking(t *testing.T) {
 	mc := &mockMQTTClient{}
 	l := &Listener{client: mc, whatWasSaid: make(chan commands.Speak, 1), voices: map[string]*Voice{}, verbose: false}

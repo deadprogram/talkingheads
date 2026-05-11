@@ -73,6 +73,14 @@ func NewListener(name, server string, voices map[string]*Voice, verbose bool) (*
 	}
 	log.Printf("Subscribed to topic %s\n", speakTopic)
 
+	sayTopic := "say/#"
+	token = client.Subscribe(sayTopic, 0, m.handleSay)
+	if token.Wait() && token.Error() != nil {
+		log.Fatal("failed subscribing to MQTT topic: ", token.Error())
+		return nil, token.Error()
+	}
+	log.Printf("Subscribed to topic %s\n", sayTopic)
+
 	return m, nil
 }
 
@@ -88,6 +96,23 @@ func (m *Listener) handleSpeaking(client mqtt.Client, msg mqtt.Message) {
 		return
 	}
 	m.whatWasSaid <- s
+}
+
+// handleSay handles messages on the say/# topic. The payload is identical in
+// shape to a Speak message, but Actors do not subscribe to say/#, so the
+// utterance is spoken (and a speaking notification is published) without being
+// added to any Actor's conversation history.
+func (m *Listener) handleSay(client mqtt.Client, msg mqtt.Message) {
+	if m.verbose {
+		log.Printf("Received say message: %s\n", string(msg.Payload()))
+	}
+
+	var s commands.Say
+	if err := json.Unmarshal(msg.Payload(), &s); err != nil {
+		log.Printf("Failed to unmarshal say message: %v\n", err)
+		return
+	}
+	m.whatWasSaid <- commands.Speak{Who: s.Who, What: s.What}
 }
 
 // Listen listens for messages on the whatWasSaid channel and tells the appropriate Voice to say it.

@@ -40,9 +40,12 @@ listener.Listen() // blocks
 
 Messages use the `commands.Speak` type from `pkg/commands` (`{"who": "…", "what": "…"}`). Messages for unknown speakers are logged and dropped.
 
+It also subscribes to `say/#` and treats incoming `commands.Say` messages identically to `Speak` for the purpose of voice playback and `speaking/<who>` notifications. The difference is that Actors do **not** subscribe to `say/#`, so utterances delivered via `say` are spoken aloud without being added to any Actor's conversation history.
+
 ## MQTT topics
 
 | Topic | Direction | Description |
 |---|---|---|
 | `speak/#` | subscribe | Messages to be spoken; routed by `who` field |
+| `say/#` | subscribe | Speak text via the named voice without affecting Actor conversation history |
 | `speaking/<who>` | publish | Notifies Actors when speaking starts (`"speaking"`) and stops (`"stopped"`) |

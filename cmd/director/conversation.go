@@ -3,14 +3,27 @@ package main
 import (
 	"encoding/json"
 	"log"
+	"strings"
 
 	"github.com/deadprogram/talkingheads/pkg/commands"
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 )
 
+// questionKind selects which MQTT topic and payload type a question is sent as.
+type questionKind int
+
+const (
+	// kindDirection publishes commands.Direction to direction/<actor>.
+	kindDirection questionKind = iota
+	// kindSay publishes commands.Say to say/<actor>; the utterance is spoken
+	// by Dialogue but is not added to any Actor's conversation history.
+	kindSay
+)
+
 type question struct {
 	Content string
 	To      string
+	Kind    questionKind
 }
 
 type conversation struct {
@@ -42,11 +55,20 @@ func newConversation(server string) (*conversation, error) {
 
 func (c *conversation) processQuestions() error {
 	for question := range c.questions {
-		topic := "direction/" + question.To
+		var topic string
+		var payload []byte
+		var err error
 
-		payload, err := json.Marshal(commands.Direction{Who: question.To, What: question.Content})
+		switch question.Kind {
+		case kindSay:
+			topic = "say/" + question.To
+			payload, err = json.Marshal(commands.Say{Who: question.To, What: question.Content})
+		default:
+			topic = "direction/" + question.To
+			payload, err = json.Marshal(commands.Direction{Who: question.To, What: question.Content})
+		}
 		if err != nil {
-			log.Printf("failed marshalling ask message: %v", err)
+			log.Printf("failed marshalling message: %v", err)
 			continue
 		}
 
@@ -58,6 +80,17 @@ func (c *conversation) processQuestions() error {
 	}
 
 	return nil
+}
+
+// trimSurroundingQuotes removes a single pair of matching surrounding double
+// quotes from s, if present. Whitespace is trimmed first so that leading or
+// trailing spaces around the quotes are ignored.
+func trimSurroundingQuotes(s string) string {
+	s = strings.TrimSpace(s)
+	if len(s) >= 2 && s[0] == '"' && s[len(s)-1] == '"' {
+		s = s[1 : len(s)-1]
+	}
+	return s
 }
 
 func (c *conversation) Close() {

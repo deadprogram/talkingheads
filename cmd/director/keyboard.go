@@ -36,7 +36,14 @@ func startKeyboardInput(questions chan question) error {
 			continue
 		}
 
-		questions <- question{To: to, Content: query}
+		kind := kindDirection
+		content := strings.TrimSpace(query)
+		if rest, ok := stripSayPrefix(content); ok {
+			kind = kindSay
+			content = trimSurroundingQuotes(rest)
+		}
+
+		questions <- question{To: to, Content: content, Kind: kind}
 	}
 
 	if err := scanner.Err(); err != nil {
@@ -48,4 +55,29 @@ func startKeyboardInput(questions chan question) error {
 
 func displayQuestion() {
 	fmt.Printf("Enter a question for an actor %v:\n", actors)
+}
+
+// stripSayPrefix returns the remainder of s with the leading "say" word
+// removed (case-insensitive) and reports whether the prefix was present.
+// Trailing punctuation directly after "say" (e.g. "say:" or "say,") is
+// tolerated.
+func stripSayPrefix(s string) (string, bool) {
+	trimmed := strings.TrimSpace(s)
+	if trimmed == "" {
+		return s, false
+	}
+	space := strings.IndexAny(trimmed, " \t")
+	var word, rest string
+	if space < 0 {
+		word = trimmed
+		rest = ""
+	} else {
+		word = trimmed[:space]
+		rest = trimmed[space+1:]
+	}
+	word = strings.TrimRight(word, ":,")
+	if !strings.EqualFold(word, "say") {
+		return s, false
+	}
+	return strings.TrimSpace(rest), true
 }

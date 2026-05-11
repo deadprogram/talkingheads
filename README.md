@@ -13,6 +13,7 @@ flowchart LR
 subgraph mqtt broker
     direction
     speak
+    say
     speaking
 end
 subgraph actors
@@ -27,10 +28,12 @@ subgraph dialogue
     sayanything
 end
 director -- publish --> direction
+director -- publish --> say
 direction-- subscribe -->actors
 actors-- publish -->speak
 speak-- subscribe -->actors
 speak-- subscribe -->dialogue
+say-- subscribe -->dialogue
 dialogue-- publish -->speaking
 speaking-- subscribe -->actors
 ```
@@ -116,10 +119,12 @@ Dialogue runs on a separate computer that is connected to the same local network
 flowchart LR
 subgraph mqtt broker
     speak
+    say
     speaking
 end
 subgraph dialogue
     speak-- subscribe -->sayanything
+    say-- subscribe -->sayanything
     subgraph sayanything
         piper-->tts[Text to speech]
     end
@@ -141,6 +146,7 @@ end
 subgraph mqtt broker
     direction
     speak
+    say
     speaking
 end
 subgraph Actor
@@ -162,6 +168,7 @@ subgraph Actor
 end
 subgraph dialogue
     speak-- subscribe -->sayanything
+    say-- subscribe -->sayanything
     subgraph sayanything
         piper-->tts[Text to speech]
     end

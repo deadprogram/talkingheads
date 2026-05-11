@@ -49,10 +49,16 @@ func startHotMicInput(ctx context.Context, questions chan question, modelPath, l
 			continue
 		}
 
+		kind := kindDirection
+		if rest, isSay := stripSayPrefix(content); isSay {
+			kind = kindSay
+			content = trimSurroundingQuotes(rest)
+		}
+
 		fmt.Printf("\rhotmic: got question for %s: %q\r\n", to, content)
 
 		select {
-		case questions <- question{To: to, Content: content}:
+		case questions <- question{To: to, Content: content, Kind: kind}:
 		case <-ctx.Done():
 			return nil
 		}

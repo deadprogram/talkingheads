@@ -6,7 +6,7 @@ Text-to-speech service that listens for MQTT messages and speaks them with the [
 
 ### `serve`
 
-Connect to an MQTT broker and speak any messages published to `speak/#`.
+Connect to an MQTT broker and speak any messages published to `speak/#` or `say/#`.
 
 ```shell
 dialogue serve --server tcp://localhost:1883 \
@@ -48,7 +48,15 @@ Messages must be published to `speak/<name>` as JSON:
 
 The `who` field is matched against the registered voice names. Messages for unknown speakers are silently dropped.
 
-When playback starts, Dialogue publishes to `speaking/<name>`:
+Messages published to `say/<name>` use the same payload shape and are spoken
+the same way, but are **not** subscribed to by Actors — use `say/#` to make a
+voice speak something without it appearing in any Actor's conversation history.
+
+```json
+{"who": "llama3000", "what": "Out-of-band announcement."}
+```
+
+When playback starts, Dialogue publishes to `speaking/<name>` (for both `speak/#` and `say/#` messages):
 
 ```json
 {"who": "llama3000", "status": "speaking"}

@@ -73,6 +73,9 @@ All payloads use the JSON types from `pkg/commands`.
 | `speaking/<name>` | subscribe | Notifications from Dialogue when this Actor's voice starts or stops playing |
 | `speak/<name>` | publish | Publish the Actor's response |
 
+Actors do **not** subscribe to `say/#`. Messages published there are spoken by
+Dialogue but are deliberately invisible to every Actor's conversation history.
+
 ### Heard speech from other Actors
 
 When another Actor publishes a sentence to `speak/<other>`, this Actor receives it via the `speak/#` subscription and adds it to the conversation as context. The heard speech is buffered and injected into the conversation immediately before the next Direction is processed — the Actor never responds to heard speech on its own.

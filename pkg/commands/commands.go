@@ -14,6 +14,14 @@ type Speak struct {
 	What string `json:"what"`
 }
 
+// Say is the payload for the say/# MQTT topic.
+// It causes Dialogue to use the named voice to speak the given text without
+// adding the utterance to any Actor's conversation history.
+type Say struct {
+	Who  string `json:"who"`
+	What string `json:"what"`
+}
+
 const (
 	StatusSpeaking = "speaking"
 	StatusStopped  = "stopped"
