@@ -32,10 +32,11 @@ func startHotMicInput(ctx context.Context, questions chan question, modelPath, l
 			continue
 		}
 
-		// Split on the first punctuation that separates the actor name from
-		// the question body. Whisper may transcribe the separator as ':', ',',
-		// '?', or '.'.
-		idx := strings.IndexAny(text, ":,?.")
+		// Split on the first separator between the actor name and the
+		// question body. Whisper may transcribe a punctuation separator
+		// (':', ',', '?', '.') or may omit it entirely, in which case we
+		// fall back to the first whitespace.
+		idx := strings.IndexAny(text, ":,?. \t")
 		if idx < 0 {
 			fmt.Printf("\rhotmic: no actor separator in %q\r\n", text)
 			continue

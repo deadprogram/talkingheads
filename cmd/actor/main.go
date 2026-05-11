@@ -371,7 +371,5 @@ func buildSystemPrompt(paths []string) (string, error) {
 		sb.Write(data)
 	}
 
-	fmt.Println(strings.TrimSpace(sb.String()))
-
 	return strings.TrimSpace(sb.String()), nil
 }
