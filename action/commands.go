@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
 
 var (
@@ -17,6 +18,13 @@ var (
 	svo         ServoDevice
 	angle       = 90
 	targetAngle = 90
+
+	// commandTimeout is the maximum time to wait for a new command before
+	// stopping the action firmware as a safety measure.
+	commandTimeout = 5 * time.Second
+
+	lastCommandTime   = time.Now()
+	lastCommandTimeMu sync.RWMutex
 )
 
 const (
@@ -40,6 +48,8 @@ const (
 
 // processCommand parses and dispatches a received serial command.
 func processCommand(cmd string) error {
+	touchCommandWatchdog()
+
 	parts := strings.SplitN(strings.TrimSpace(cmd), " ", 2)
 	command := parts[0]
 
@@ -82,6 +92,22 @@ func setMode(m string) {
 	modeMu.Lock()
 	defer modeMu.Unlock()
 	mode = m
+}
+
+// touchCommandWatchdog records the time the most recent command was received,
+// resetting the command timeout countdown.
+func touchCommandWatchdog() {
+	lastCommandTimeMu.Lock()
+	defer lastCommandTimeMu.Unlock()
+	lastCommandTime = time.Now()
+}
+
+// timeSinceLastCommand returns the elapsed time since the last command was
+// received.
+func timeSinceLastCommand() time.Duration {
+	lastCommandTimeMu.RLock()
+	defer lastCommandTimeMu.RUnlock()
+	return time.Since(lastCommandTime)
 }
 
 // Returns an int >= min, < max

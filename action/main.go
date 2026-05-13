@@ -16,8 +16,11 @@ func main() {
 	matrix = NewMatrix()
 	svo, _ = NewServo()
 
+	touchCommandWatchdog()
+
 	go lights()
 	go action()
+	go commandWatchdog()
 
 	for {
 		if uart.Buffered() > 0 {
@@ -115,5 +118,20 @@ func action() {
 		}
 
 		time.Sleep(250 * time.Millisecond)
+	}
+}
+
+// commandWatchdog stops the firmware if no command has been received within
+// commandTimeout. This guards against a stalled host leaving the head in an
+// active state (e.g. moving while speaking) indefinitely.
+func commandWatchdog() {
+	for {
+		time.Sleep(500 * time.Millisecond)
+		if timeSinceLastCommand() < commandTimeout {
+			continue
+		}
+		if getMode() != StateStopped {
+			setMode(StateStopped)
+		}
 	}
 }
