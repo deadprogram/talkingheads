@@ -305,6 +305,133 @@ func (a *Actor) warmUpSystemPrompt(ctx context.Context, sysContent string) error
 	return nil
 }
 
+// preDecodeConversation renders the conversation, tokenizes it, and decodes
+// the new tokens into the KV cache without sampling any output. It uses the
+// same three-case incremental-decode logic as generateTurn so that subsequent
+// calls to generateTurn only need to decode the delta (typically a single
+// Direction message) rather than the full accumulated context.
+//
+// The prompt is rendered with addAssistant=false because no generation is
+// requested; generateTurn will append the assistant-turn opener when it runs.
+// Since both renders share the same token prefix, Case 1 of the cache logic
+// applies and generateTurn only decodes the Direction tokens on top.
+func (a *Actor) preDecodeConversation(ctx context.Context, conversation *[]message.Message) error {
+	tmplOpts := template.Options{EnableThinking: a.cfg.EnableThinking}
+	renderConv := prepareConversationForTemplate(*conversation, a.cfg.ModelFormat)
+	prompt, err := template.ApplyWithOptions(a.chatTemplate, renderConv, false, tmplOpts)
+	if err != nil {
+		return fmt.Errorf("error applying chat template: %w", err)
+	}
+
+	tokens := llama.Tokenize(a.vocab, prompt, true, true)
+
+	// Trim oldest non-system messages if the prompt exceeds the context window.
+	if nCtx := int(llama.NCtx(a.llamaCtx)); nCtx > 0 {
+		maxPromptTokens := nCtx - a.cfg.MaxTokens
+		for len(tokens) > maxPromptTokens && len(*conversation) > 2 {
+			if a.cfg.Verbose {
+				log.Println("trimming oldest message from conversation to fit context window")
+			}
+			*conversation = append((*conversation)[:1], (*conversation)[2:]...)
+			renderConv = prepareConversationForTemplate(*conversation, a.cfg.ModelFormat)
+			prompt, err = template.ApplyWithOptions(a.chatTemplate, renderConv, false, tmplOpts)
+			if err != nil {
+				return fmt.Errorf("error applying chat template after trim: %w", err)
+			}
+			tokens = llama.Tokenize(a.vocab, prompt, true, false)
+		}
+	}
+
+	mem, err := llama.GetMemory(a.llamaCtx)
+	if err != nil {
+		return fmt.Errorf("error getting memory: %w", err)
+	}
+
+	var decodeFrom int
+	t0 := time.Now()
+	if a.nCachedPrompt > 0 && len(tokens) >= a.nCachedPrompt {
+		if ok, rmErr := llama.MemorySeqRm(mem, 0, llama.Pos(a.nCachedPrompt), -1); ok && rmErr == nil {
+			decodeFrom = a.nCachedPrompt
+			if a.cfg.Verbose {
+				log.Printf("[verbose] preprocess cache trim: kept %d cached tokens, removed tail (%v)", a.nCachedPrompt, time.Since(t0))
+			}
+		} else {
+			if clearErr := llama.MemoryClear(mem, true); clearErr != nil {
+				return fmt.Errorf("error clearing memory: %w", clearErr)
+			}
+			a.nCachedPrompt = 0
+			if a.cfg.Verbose {
+				log.Printf("[verbose] preprocess cache trim failed, full clear (%v)", time.Since(t0))
+			}
+		}
+	} else if a.nCachedPrompt > 0 && a.nSystemPromptTokens > 0 && len(tokens) >= a.nSystemPromptTokens {
+		if ok, rmErr := llama.MemorySeqRm(mem, 0, llama.Pos(a.nSystemPromptTokens), -1); ok && rmErr == nil {
+			decodeFrom = a.nSystemPromptTokens
+			a.nCachedPrompt = a.nSystemPromptTokens
+			if a.cfg.Verbose {
+				log.Printf("[verbose] preprocess cache trim (shrink): restored to system prefix (%d tokens) (%v)", a.nSystemPromptTokens, time.Since(t0))
+			}
+		} else {
+			if clearErr := llama.MemoryClear(mem, true); clearErr != nil {
+				return fmt.Errorf("error clearing memory: %w", clearErr)
+			}
+			a.nCachedPrompt = 0
+			if a.cfg.Verbose {
+				log.Printf("[verbose] preprocess cache trim failed (shrink), full clear (%v)", time.Since(t0))
+			}
+		}
+	} else {
+		if clearErr := llama.MemoryClear(mem, true); clearErr != nil {
+			return fmt.Errorf("error clearing memory: %w", clearErr)
+		}
+		a.nCachedPrompt = 0
+		if a.cfg.Verbose {
+			log.Printf("[verbose] preprocess memory clear: %v", time.Since(t0))
+		}
+	}
+
+	nBatch := int(llama.NBatch(a.llamaCtx))
+	if nBatch <= 0 {
+		nBatch = 512
+	}
+	if a.cfg.Verbose {
+		log.Printf("[verbose] preprocess: decoding %d new tokens (of %d total)", len(tokens)-decodeFrom, len(tokens))
+	}
+	for i := decodeFrom; i < len(tokens); i += nBatch {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+		end := i + nBatch
+		if end > len(tokens) {
+			end = len(tokens)
+		}
+		if _, err := llama.Decode(a.llamaCtx, llama.BatchGetOne(tokens[i:end])); err != nil {
+			return fmt.Errorf("error pre-decoding conversation: %w", err)
+		}
+	}
+
+	a.nCachedPrompt = len(tokens)
+	return nil
+}
+
+// PreprocessFunc returns a callback suitable for use as a preprocessing hook
+// in MQTTListener. Each time another actor's Speak message is added to the
+// conversation while waiting for a Direction, the callback pre-decodes the
+// updated conversation into the KV cache. When the Direction finally arrives,
+// generateTurn only needs to decode the Direction tokens — not the entire
+// accumulated heard context — reducing response latency.
+func (a *Actor) PreprocessFunc(ctx context.Context) func(*[]message.Message) {
+	return func(conversation *[]message.Message) {
+		if err := a.preDecodeConversation(ctx, conversation); err != nil {
+			if ctx.Err() == nil {
+				log.Printf("preprocess: %v", err)
+			}
+		}
+	}
+}
+
 // Close releases model and context resources.
 func (a *Actor) Close() {
 	llama.SamplerFree(a.sampler)

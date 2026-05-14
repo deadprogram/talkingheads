@@ -2,6 +2,7 @@ package actor
 
 import (
 	"encoding/json"
+	"sync"
 	"testing"
 	"time"
 
@@ -307,6 +308,144 @@ func TestMoreFunc_HeardArrivingDuringWaitIsIncluded(t *testing.T) {
 	last := conv[len(conv)-1].GetContent()["content"].(string)
 	if last != "respond to phineas" {
 		t.Errorf("direction must be last; got %q", last)
+	}
+}
+
+// --- SetPreprocessCallback / preprocessing MoreFunc ---
+
+func TestSetPreprocessCallback_NilIsAccepted(t *testing.T) {
+	l := newTestListener("gemmai", nil)
+	l.SetPreprocessCallback(nil)
+	if l.preprocessCB != nil {
+		t.Error("expected preprocessCB to be nil after SetPreprocessCallback(nil)")
+	}
+}
+
+func TestSetPreprocessCallback_Stored(t *testing.T) {
+	l := newTestListener("gemmai", nil)
+	called := false
+	cb := func(_ *[]message.Message) { called = true }
+	l.SetPreprocessCallback(cb)
+	if l.preprocessCB == nil {
+		t.Fatal("expected preprocessCB to be set")
+	}
+	conv := []message.Message{}
+	l.preprocessCB(&conv)
+	if !called {
+		t.Error("expected stored callback to be callable")
+	}
+}
+
+func TestMoreFunc_WithPreprocessCB_CallsCallbackOnHeard(t *testing.T) {
+	l := newTestListener("gemmai", nil)
+
+	var mu sync.Mutex
+	var callCount int
+	l.SetPreprocessCallback(func(_ *[]message.Message) {
+		mu.Lock()
+		callCount++
+		mu.Unlock()
+	})
+
+	moreFn := l.MoreFunc()
+	conv := []message.Message{}
+
+	go func() {
+		time.Sleep(20 * time.Millisecond)
+		l.heard <- "phineas says: First."
+		l.heard <- "phineas says: Second."
+		time.Sleep(60 * time.Millisecond)
+		l.incoming <- "what did phineas say?"
+	}()
+
+	moreFn(&conv)
+
+	mu.Lock()
+	n := callCount
+	mu.Unlock()
+	if n == 0 {
+		t.Fatal("expected preprocessCB to be called at least once for heard speech")
+	}
+	if len(conv) == 0 {
+		t.Fatal("expected conversation to be non-empty after MoreFunc")
+	}
+	last := conv[len(conv)-1].GetContent()["content"].(string)
+	if last != "what did phineas say?" {
+		t.Errorf("last message: got %q, want direction", last)
+	}
+}
+
+func TestMoreFunc_WithPreprocessCB_HeardBeforeDirection(t *testing.T) {
+	l := newTestListener("gemmai", nil)
+	l.SetPreprocessCallback(func(_ *[]message.Message) {})
+
+	l.heard <- "phineas says: The answer is 42."
+
+	moreFn := l.MoreFunc()
+	conv := []message.Message{}
+	go func() { l.incoming <- "what did phineas say?" }()
+	moreFn(&conv)
+
+	if len(conv) < 2 {
+		t.Fatalf("expected at least 2 messages, got %d", len(conv))
+	}
+	first := conv[0].GetContent()["content"].(string)
+	last := conv[len(conv)-1].GetContent()["content"].(string)
+	if first != "phineas says: The answer is 42." {
+		t.Errorf("first: got %q, want heard speech", first)
+	}
+	if last != "what did phineas say?" {
+		t.Errorf("last: got %q, want direction", last)
+	}
+}
+
+func TestMoreFunc_WithPreprocessCB_BlocksUntilDirection(t *testing.T) {
+	l := newTestListener("gemmai", nil)
+	l.SetPreprocessCallback(func(_ *[]message.Message) {})
+
+	moreFn := l.MoreFunc()
+	conv := []message.Message{}
+
+	done := make(chan struct{})
+	go func() {
+		moreFn(&conv)
+		close(done)
+	}()
+
+	// Sending only heard speech must not unblock MoreFunc.
+	l.heard <- "phineas says: Something."
+	select {
+	case <-done:
+		t.Error("MoreFunc returned before a Direction was sent")
+	case <-time.After(80 * time.Millisecond):
+		// expected — still waiting for a Direction
+	}
+
+	l.incoming <- "direction"
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Error("MoreFunc did not return after Direction was sent")
+	}
+}
+
+func TestMoreFunc_WithPreprocessCB_ClosedDone(t *testing.T) {
+	l := newTestListener("gemmai", nil)
+	l.SetPreprocessCallback(func(_ *[]message.Message) {})
+	moreFn := l.MoreFunc()
+
+	conv := []message.Message{}
+	done := make(chan struct{})
+	go func() {
+		moreFn(&conv)
+		close(done)
+	}()
+
+	close(l.done)
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Error("MoreFunc did not return after done was closed")
 	}
 }
 

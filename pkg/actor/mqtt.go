@@ -17,15 +17,16 @@ import (
 // The published response payload is {"who":"<name>","what":"<content>"},
 // which is compatible with the speak/# subscription in pkg/dialogue.
 type MQTTListener struct {
-	name       string
-	commander  Commander
-	client     mqtt.Client
-	incoming   chan string
-	heard      chan string
-	pauseWords map[string]bool
-	done       chan struct{}
-	closeOnce  sync.Once
-	verbose    bool
+	name         string
+	commander    Commander
+	client       mqtt.Client
+	incoming     chan string
+	heard        chan string
+	pauseWords   map[string]bool
+	done         chan struct{}
+	closeOnce    sync.Once
+	verbose      bool
+	preprocessCB func(*[]message.Message)
 }
 
 // NewMQTTListener connects to the broker, subscribes to "direction/<name>" for
@@ -201,37 +202,74 @@ func (l *MQTTListener) enqueue(text string) {
 	}
 }
 
+// SetPreprocessCallback registers a callback that is invoked each time a
+// heard Speak message is appended to the conversation while waiting for a
+// Direction. The callback is called with the updated conversation so it can
+// pre-decode the new context into the model's KV cache. Pass nil to disable.
+func (l *MQTTListener) SetPreprocessCallback(cb func(*[]message.Message)) {
+	l.preprocessCB = cb
+}
+
 // MoreFunc returns a moreConversationFunc that blocks until a Direction
 // arrives, then appends any buffered heard-speech context followed by the
 // Direction. Heard speech from other actors is accumulated in the conversation
 // but never triggers a response on its own.
+//
+// When a preprocessing callback has been registered via SetPreprocessCallback,
+// each incoming heard Speak message triggers a pre-decode into the KV cache so
+// that the Actor is ready to respond with minimal latency when a Direction
+// arrives.
 func (l *MQTTListener) MoreFunc() func(*[]message.Message) {
 	return func(conversation *[]message.Message) {
 		// Drain any heard speech that accumulated during the previous
 		// generation cycle, adding it as context.
 		l.drainHeard(conversation)
 
-		// Block until a Direction arrives or the listener is closed.
-		var directionText string
-		select {
-		case text, ok := <-l.incoming:
-			if !ok || text == "" {
+		if l.preprocessCB == nil {
+			// No preprocessing: block until a Direction arrives or the listener
+			// is closed, then drain any remaining heard speech and return.
+			var directionText string
+			select {
+			case text, ok := <-l.incoming:
+				if !ok || text == "" {
+					return
+				}
+				directionText = text
+			case <-l.done:
 				return
 			}
-			directionText = text
-		case <-l.done:
+			l.drainHeard(conversation)
+			*conversation = append(*conversation, message.Chat{Role: "user", Content: directionText})
+			l.drainIncoming(conversation)
 			return
 		}
 
-		// Drain any heard speech that arrived while waiting for Direction,
-		// so the Actor has the most up-to-date context before seeing it.
-		l.drainHeard(conversation)
-
-		// Append the Direction that triggered this turn.
-		*conversation = append(*conversation, message.Chat{Role: "user", Content: directionText})
-
-		// Drain any additional buffered Direction messages without blocking.
-		l.drainIncoming(conversation)
+		// Preprocessing mode: wait for heard speech or a Direction. Each time
+		// a heard message arrives, add it to the conversation and invoke the
+		// preprocessing callback so the model's KV cache stays current.
+		for {
+			select {
+			case text, ok := <-l.heard:
+				if !ok || text == "" {
+					continue
+				}
+				*conversation = append(*conversation, message.Chat{Role: "user", Content: text})
+				l.drainHeard(conversation)
+				l.preprocessCB(conversation)
+			case text, ok := <-l.incoming:
+				if !ok || text == "" {
+					return
+				}
+				// A Direction arrived — drain any final heard speech so the
+				// Actor has the most up-to-date context, then append the Direction.
+				l.drainHeard(conversation)
+				*conversation = append(*conversation, message.Chat{Role: "user", Content: text})
+				l.drainIncoming(conversation)
+				return
+			case <-l.done:
+				return
+			}
+		}
 	}
 }
 

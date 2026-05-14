@@ -17,6 +17,31 @@ func (m *mockTool) Call(_ context.Context, toolCall message.ToolCall) string {
 	return toolSuccessResponse("result", "ok")
 }
 
+// TestPreprocessFunc_ReturnsNonNilCallback verifies that PreprocessFunc always
+// returns a non-nil callable regardless of model state.
+func TestPreprocessFunc_ReturnsNonNilCallback(t *testing.T) {
+	a := &Actor{}
+	fn := a.PreprocessFunc(context.Background())
+	if fn == nil {
+		t.Fatal("PreprocessFunc returned nil")
+	}
+}
+
+// TestPreprocessFunc_CancelledContextIsSilent verifies that when the context
+// is already cancelled the callback does not panic — the error from a nil
+// llama context is swallowed because ctx.Err() != nil.
+func TestPreprocessFunc_CancelledContextIsSilent(t *testing.T) {
+	a := &Actor{}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	fn := a.PreprocessFunc(ctx)
+	conv := []message.Message{
+		message.Chat{Role: "user", Content: "hello"},
+	}
+	fn(&conv) // must not panic
+}
+
 func TestGetMore_NilFunc_ReturnsFalse(t *testing.T) {
 	a := &Actor{moreConversationFunc: nil}
 

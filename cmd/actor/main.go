@@ -251,6 +251,7 @@ func run(c *cli.Context) error {
 
 	var moreFunc func(*[]message.Message)
 	var outputFunc func(string)
+	var ml *actor.MQTTListener
 
 	cfg := actor.DefaultConfig()
 	cfg.Temperature = float32(c.Float64("temperature"))
@@ -273,7 +274,8 @@ func run(c *cli.Context) error {
 	cfg.Verbose = verbose
 
 	if server != "" {
-		ml, err := actor.NewMQTTListener(name, server, commander, cfg.PauseWords, verbose)
+		var err error
+		ml, err = actor.NewMQTTListener(name, server, commander, cfg.PauseWords, verbose)
 		if err != nil {
 			return cli.Exit(fmt.Sprintf("failed to connect to MQTT broker: %v", err), 1)
 		}
@@ -315,6 +317,10 @@ func run(c *cli.Context) error {
 		return cli.Exit(fmt.Sprintf("failed to create actor: %v", err), 1)
 	}
 	defer a.Close()
+
+	if ml != nil {
+		ml.SetPreprocessCallback(a.PreprocessFunc(ctx))
+	}
 
 	fmt.Println("Actor ready. Use Ctrl+C or Ctrl+D to quit.")
 
