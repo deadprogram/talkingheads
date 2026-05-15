@@ -83,20 +83,20 @@ func action() {
 			}
 
 		case StateWaiting:
-			// Move a small amount once every 5 seconds (20 × 250ms iterations).
-			waitCounter++
-			if waitCounter >= 20 {
-				waitCounter = 0
-				jitter := randomInt(-15, 16)
+			// Move a small amount once every 2-3 seconds.
+			waitCounter--
+			if waitCounter <= 0 {
+				waitCounter = randomInt(8, 12)
+				jitter := randomInt(-10, 11)
 				svo.SetAngle(angle + jitter)
 			}
 
 		case StateSpeaking:
-			// Move a small amount once every 1.25 second (5 × 250ms iterations).
-			speakCounter++
-			if speakCounter >= 5 {
-				speakCounter = 0
-				jitter := randomInt(-100, 101)
+			// Move a small amount once every second or so.
+			speakCounter--
+			if speakCounter <= 0 {
+				speakCounter = randomInt(2, 4)
+				jitter := randomInt(-50, 51)
 				svo.SetAngle(angle + jitter)
 			}
 
