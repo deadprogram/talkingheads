@@ -90,6 +90,34 @@ func TestHandleSpeakingStatus_UnknownStatus(t *testing.T) {
 	}
 }
 
+func TestHandleSpeakingStatus_OtherActorSpeaking(t *testing.T) {
+	mc := &mockCommander{}
+	l := &MQTTListener{name: "testactor", commander: mc}
+
+	payload, _ := json.Marshal(commands.Speaking{Who: "otheractor", Status: commands.StatusSpeaking})
+	msg := &mockMessage{payload: payload, topic: "speaking/otheractor"}
+
+	l.handleSpeakingStatus(nil, msg)
+
+	if len(mc.sentCmds) != 1 || mc.sentCmds[0] != "wait" {
+		t.Errorf("commander.Send: got %v, want [\"wait\"]", mc.sentCmds)
+	}
+}
+
+func TestHandleSpeakingStatus_OtherActorStopped(t *testing.T) {
+	mc := &mockCommander{}
+	l := &MQTTListener{name: "testactor", commander: mc}
+
+	payload, _ := json.Marshal(commands.Speaking{Who: "otheractor", Status: commands.StatusStopped})
+	msg := &mockMessage{payload: payload, topic: "speaking/otheractor"}
+
+	l.handleSpeakingStatus(nil, msg)
+
+	if len(mc.sentCmds) != 1 || mc.sentCmds[0] != "stop" {
+		t.Errorf("commander.Send: got %v, want [\"stop\"]", mc.sentCmds)
+	}
+}
+
 // newTestListener builds a MQTTListener suitable for unit tests: no real MQTT
 // connection, buffered channels, and an optional pause-word set.
 func newTestListener(name string, pauseWords []string) *MQTTListener {

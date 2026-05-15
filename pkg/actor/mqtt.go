@@ -81,12 +81,12 @@ func NewMQTTListener(name, server string, commander Commander, pauseWords []stri
 	if verbose {
 		log.Printf("Subscribed to speak/#\n")
 	}
-	if err := subscribe(client, "speaking/"+name, l.handleSpeakingStatus); err != nil {
+	if err := subscribe(client, "speaking/#", l.handleSpeakingStatus); err != nil {
 		client.Disconnect(250)
 		return nil, err
 	}
 	if verbose {
-		log.Printf("Subscribed to speaking/%s\n", name)
+		log.Printf("Subscribed to speaking/#\n")
 	}
 
 	return l, nil
@@ -119,11 +119,30 @@ func (l *MQTTListener) handleSpeakingStatus(_ mqtt.Client, msg mqtt.Message) {
 		log.Printf("Failed to unmarshal speaking message: %v\n", err)
 		return
 	}
+	if s.Who == l.name {
+		// Own speaking status.
+		switch s.Status {
+		case commands.StatusSpeaking:
+			if err := l.commander.Send("speak"); err != nil {
+				if l.verbose {
+					log.Printf("failed to send speak command: %v\n", err)
+				}
+			}
+		case commands.StatusStopped:
+			if err := l.commander.Send("stop"); err != nil {
+				if l.verbose {
+					log.Printf("failed to send stop command: %v\n", err)
+				}
+			}
+		}
+		return
+	}
+	// Another actor's speaking status — enter waiting while they speak.
 	switch s.Status {
 	case commands.StatusSpeaking:
-		if err := l.commander.Send("speak"); err != nil {
+		if err := l.commander.Send("wait"); err != nil {
 			if l.verbose {
-				log.Printf("failed to send speak command: %v\n", err)
+				log.Printf("failed to send wait command: %v\n", err)
 			}
 		}
 	case commands.StatusStopped:
