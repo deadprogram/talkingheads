@@ -95,8 +95,8 @@ func action() {
 			// Move a small amount once every second or so.
 			speakCounter--
 			if speakCounter <= 0 {
-				speakCounter = randomInt(2, 4)
-				jitter := randomInt(-50, 51)
+				speakCounter = randomInt(2, 3)
+				jitter := randomInt(-75, 76)
 				svo.SetAngle(angle + jitter)
 			}
 
