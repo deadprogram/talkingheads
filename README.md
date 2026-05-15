@@ -109,7 +109,7 @@ end
 subgraph hotmic
     subgraph bucky
         whisper.cpp
-        whisper.cpp-->stt[Speech to text model]
+        whisper.cpp-->stt[Speech To Text model]
     end
 end
 director -- publish --> direction
@@ -131,7 +131,7 @@ subgraph dialogue
     speak-- subscribe -->sayanything
     say-- subscribe -->sayanything
     subgraph sayanything
-        piper-->tts[Text to speech model]
+        piper-->tts[Text To Speech model]
     end
     subgraph portaudio
         tts-- WAV -->speaker
@@ -175,7 +175,7 @@ subgraph dialogue
     speak-- subscribe -->sayanything
     say-- subscribe -->sayanything
     subgraph sayanything
-        piper-->tts[Text to speech model]
+        piper-->tts[Text To Speech model]
     end
     subgraph portaudio
         tts-- WAV -->speaker
@@ -188,7 +188,7 @@ end
 subgraph hotmic
     subgraph bucky
         whisper.cpp
-        whisper.cpp-->stt[Speech to text model]
+        whisper.cpp-->stt[Speech To Text model]
     end
 end
 director -- publish --> direction
@@ -197,9 +197,11 @@ director -- publish --> say
 
 ## Models
 
-More info soon...
+The best performing model being used for fine tuning the Actors is currently the gemma3 270M parameter instruction tuned model. Typically the Q4K_M variation has had the best tradeoff of t/s and staying in character.
 
 ## MQTT broker
+
+Any MQTT broker will work, this container is a safe bet.
 
 ```shell
 docker run -d --network host eclipse-mosquitto
@@ -211,4 +213,4 @@ https://github.com/OHF-Voice/piper1-gpl
 
 - download binary
 - add to path
-- download voices to `./voices`
+- download voice models to `./voices`

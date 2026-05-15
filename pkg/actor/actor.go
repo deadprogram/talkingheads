@@ -995,6 +995,7 @@ func stripActorMarkup(s string) string {
 	// line break (e.g. after a stripped markdown bullet) don't get glued
 	// together when downstream code collapses or removes other whitespace.
 	s = strings.ReplaceAll(s, "\n", " ")
+	s = strings.ReplaceAll(s, "|", " ")
 	s = missingSpaceAfterPeriodRE.ReplaceAllString(s, "$1. $2")
 	s = strings.TrimSpace(s)
 	// Some fine-tuned models (e.g. gemma-3-270M-finetune) wrap every reply in
