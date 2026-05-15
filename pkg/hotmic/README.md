@@ -2,14 +2,14 @@
 
 Push-to-talk microphone capture with local speech-to-text transcription.
 
-Press a configurable key once to start recording and again to stop. The captured audio is transcribed offline using a [whisper.cpp](https://github.com/ggml-org/whisper.cpp) model and returned as a plain string.
+Press a configurable key once to start recording and again to stop. The captured audio is transcribed offline using a [whisper.cpp](https://github.com/ggml-org/whisper.cpp) model via [ardanlabs/bucky](https://github.com/ardanlabs/bucky) and returned as a plain string.
 
 ## Dependencies
 
 | Dependency | Purpose |
 |---|---|
 | [gordonklaus/portaudio](https://github.com/gordonklaus/portaudio) | Audio capture via PortAudio |
-| [ggerganov/whisper.cpp bindings/go](https://github.com/ggml-org/whisper.cpp/tree/master/bindings/go) | Speech-to-text (CGo, local build required) |
+| [ardanlabs/bucky](https://github.com/ardanlabs/bucky) | Speech-to-text via whisper.cpp (purego FFI, no CGo) |
 | [golang.org/x/term](https://pkg.go.dev/golang.org/x/term) | Raw terminal key detection |
 
 ## Prerequisites
@@ -29,95 +29,50 @@ sudo dnf install portaudio-devel
 brew install portaudio
 ```
 
-### 2. whisper.cpp (built from source)
+### 2. libwhisper shared library
 
-The Go module uses a `replace` directive pointing at a local whisper.cpp checkout because the published module does not bundle the required C libraries. You need to build `libwhisper.a` yourself:
+Bucky loads `libwhisper.so` at runtime via `dlopen`. You need a pre-built shared library; no CGo or static library is required.
 
-To build with CPU-only support:
+Build with CPU-only support:
 
 ```sh
-git submodule update --init lib/whisper.cpp
-cd lib/whisper.cpp
-cmake -B build -DBUILD_SHARED_LIBS=OFF -DGGML_OPENMP=OFF -DWHISPER_BUILD_TESTS=OFF -DWHISPER_BUILD_EXAMPLES=OFF
+git clone https://github.com/ggml-org/whisper.cpp
+cd whisper.cpp
+cmake -B build -DBUILD_SHARED_LIBS=ON -DGGML_OPENMP=OFF -DWHISPER_BUILD_TESTS=OFF -DWHISPER_BUILD_EXAMPLES=OFF
 cmake --build build --config Release -j$(nproc)
-# The resulting static libraries are written to the repo root:
-cp build/src/libwhisper.a .
-cp build/ggml/src/libggml.a .
+# Copy the resulting shared library to a stable location, e.g. ~/Development/bucky/lib/
+cp build/src/libwhisper.so ~/Development/bucky/lib/
 ```
 
-To build with CUDA support:
+At runtime, point `BUCKY_LIB` at the directory containing `libwhisper.so`:
 
 ```sh
-git submodule update --init lib/whisper.cpp
-cd lib/whisper.cpp
-cmake -B build -DBUILD_SHARED_LIBS=OFF -DGGML_OPENMP=OFF -DWHISPER_BUILD_TESTS=OFF -DWHISPER_BUILD_EXAMPLES=OFF -DGGML_CUDA=1 -DCMAKE_CUDA_ARCHITECTURES="86;89" -DCMAKE_DISABLE_FIND_PACKAGE_NCCL=ON -DGGML_BACKEND_DL=ON
-cmake --build build --config Release -j$(nproc)
-# The resulting static libraries are written to the repo root:
-cp build/src/libwhisper.a .
-cp build/ggml/src/libggml.a .
-
-
-> **Note:** The `go.mod` files in this repository have a `replace` directive that maps
-> `github.com/ggerganov/whisper.cpp/bindings/go` to the submodule:
-> ```
-> replace github.com/ggerganov/whisper.cpp/bindings/go => ./lib/whisper.cpp/bindings/go
-> ```
-> No manual adjustment is needed as long as you initialised the submodule.
+export BUCKY_LIB=~/Development/bucky/lib
+```
 
 ### 3. A whisper model file
 
 Download any GGML-format model, for example:
 
 ```sh
-cd lib/whisper.cpp
-bash models/download-ggml-model.sh base.en
-# Model is saved to lib/whisper.cpp/models/ggml-base.en.bin
+# Using the whisper.cpp helper script:
+bash whisper.cpp/models/download-ggml-model.sh base.en
+# Or download directly from Hugging Face:
+wget https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin
 ```
 
 ## Building
 
-Because the whisper.cpp bindings use CGo, you must tell the compiler where to find the headers and the static library. Set the following environment variables before `go build` (or export them in your shell profile):
+Bucky uses purego FFI — no CGo build flags are required. Build normally:
 
 ```sh
-export WHISPER_DIR=$(git rev-parse --show-toplevel)/lib/whisper.cpp
-export C_INCLUDE_PATH=$WHISPER_DIR/include:$WHISPER_DIR/ggml/include
-export LIBRARY_PATH=$WHISPER_DIR
-export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$WHISPER_DIR
-```
-
-Then build normally:
-
-```sh
-CGO_LDFLAGS="-L$WHISPER_DIR -lwhisper -lggml -lm -lstdc++" \
 go build ./pkg/hotmic/...
 ```
 
 Or build the whole project:
 
 ```sh
-CGO_LDFLAGS="-L$WHISPER_DIR -lwhisper -lggml -lm -lstdc++" \
 go build ./...
-```
-
-### One-liner
-
-```sh
-WHISPER_DIR=$(git rev-parse --show-toplevel)/lib/whisper.cpp \
-C_INCLUDE_PATH=$WHISPER_DIR/include:$WHISPER_DIR/ggml/include \
-LIBRARY_PATH=$WHISPER_DIR \
-CGO_LDFLAGS="-L$WHISPER_DIR -lwhisper -lggml -lm -lstdc++" \
-go build ./pkg/hotmic/...
-```
-
-### CUDA
-
-```sh
-export WHISPER_DIR=$$(git rev-parse --show-toplevel)/lib/whisper.cpp
-export CUDA_DIR=/usr/local/cuda-13
-export C_INCLUDE_PATH=$${WHISPER_DIR}/include:$${WHISPER_DIR}/ggml/include
-export LD_LIBRARY_PATH=$${LD_LIBRARY_PATH}:$${WHISPER_DIR}:$${CUDA_DIR}/lib64
-export CGO_LDFLAGS="-L$${WHISPER_DIR} -lwhisper -lggml -lm -lstdc++ -L$${CUDA_DIR}/lib64 -lcudart -lcublas -lcuda"
-cd cmd/director && go build -o ../../build/director
 ```
 
 ## Usage
@@ -126,9 +81,10 @@ cd cmd/director && go build -o ../../build/director
 import "github.com/deadprogram/talkingheads/pkg/hotmic"
 
 mic, err := hotmic.New(hotmic.Options{
-    Key:       ' ',                                          // space toggles record on/off
-    ModelPath: "lib/whisper.cpp/models/ggml-base.en.bin",
-    Language:  "en",                                        // or "auto"
+    Key:       ' ',                    // space toggles record on/off
+    LibPath:   "/path/to/bucky/lib",   // dir containing libwhisper.so; defaults to $BUCKY_LIB
+    ModelPath: "/path/to/ggml-base.en.bin",
+    Language:  "en",                   // or "auto"
 })
 if err != nil {
     log.Fatal(err)

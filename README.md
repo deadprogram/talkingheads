@@ -58,9 +58,9 @@ subgraph Actor
     end
     subgraph yzma
         run<-->llama.cpp
-        llama.cpp-->model
+        llama.cpp-->model[Tiny Language Model]
     end
-    ask-- subscribe -->run
+    direction-- subscribe -->run
     run-- publish -->speak
     speak-- subscribe -->run
     speaking-- subscribe -->run
@@ -95,20 +95,25 @@ end
 
 ### Director
 
-Director runs on a separate computer that is connected to the same local network as the MQTT broker. It uses the Go bindings for [whisper.cpp](https://github.com/ggml-org/whisper.cpp) to perform "push to talk" to communicate with Actors.
+Director runs on a separate computer that is connected to the same local network as the MQTT broker. It uses [ardanlabs/bucky](https://github.com/ardanlabs/bucky) with a local [whisper.cpp](https://github.com/ggml-org/whisper.cpp) shared library to perform "push to talk" to communicate with Actors.
 
 ```mermaid
 flowchart LR
 subgraph mqtt broker
     direction
+    say
 end
 subgraph director
     hotmic
 end
 subgraph hotmic
-    whisper.cpp
+    subgraph bucky
+        whisper.cpp
+        whisper.cpp-->stt[Speech to text model]
+    end
 end
 director -- publish --> direction
+director -- publish --> say
 ```
 
 ### Dialogue
@@ -126,7 +131,7 @@ subgraph dialogue
     speak-- subscribe -->sayanything
     say-- subscribe -->sayanything
     subgraph sayanything
-        piper-->tts[Text to speech]
+        piper-->tts[Text to speech model]
     end
     subgraph portaudio
         tts-- WAV -->speaker
@@ -159,9 +164,9 @@ subgraph Actor
     end
     subgraph yzma
         run<-->llama.cpp
-        llama.cpp-->model
+        llama.cpp-->model[Tiny Language Model]
     end
-    ask-- subscribe -->run
+    direction-- subscribe -->run
     run-- publish -->speak
     speak-- subscribe -->run
     speaking-- subscribe -->run
@@ -170,7 +175,7 @@ subgraph dialogue
     speak-- subscribe -->sayanything
     say-- subscribe -->sayanything
     subgraph sayanything
-        piper-->tts[Text to speech]
+        piper-->tts[Text to speech model]
     end
     subgraph portaudio
         tts-- WAV -->speaker
@@ -181,9 +186,13 @@ subgraph director
     hotmic
 end
 subgraph hotmic
-    whisper.cpp
+    subgraph bucky
+        whisper.cpp
+        whisper.cpp-->stt[Speech to text model]
+    end
 end
 director -- publish --> direction
+director -- publish --> say
 ```
 
 ## Models

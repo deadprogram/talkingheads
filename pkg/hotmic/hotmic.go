@@ -9,10 +9,9 @@ import (
 	"os"
 	"strings"
 
+	"github.com/ardanlabs/bucky/pkg/whisper"
 	portaudio "github.com/gordonklaus/portaudio"
 	"golang.org/x/term"
-
-	whisper "github.com/ggerganov/whisper.cpp/bindings/go/pkg/whisper"
 )
 
 // rawWriter wraps an io.Writer and replaces bare \n with \r\n so that log
@@ -34,13 +33,17 @@ const (
 type HotMic struct {
 	key      rune
 	language string
-	model    whisper.Model
+	ctx      whisper.Context
 }
 
 // Options configures a HotMic instance.
 type Options struct {
 	// Key is the rune that toggles recording on/off. Defaults to space (' ').
 	Key rune
+
+	// LibPath is the path to the directory containing the libwhisper shared
+	// library. If empty, the BUCKY_LIB environment variable is used.
+	LibPath string
 
 	// ModelPath is the path to a whisper.cpp ggml model file (e.g. ggml-base.en.bin).
 	ModelPath string
@@ -59,8 +62,16 @@ func New(opts Options) (*HotMic, error) {
 	if opts.Language == "" {
 		opts.Language = "auto"
 	}
+	if opts.LibPath == "" {
+		opts.LibPath = os.Getenv("BUCKY_LIB")
+	}
 
-	model, err := whisper.New(opts.ModelPath)
+	if err := whisper.Load(opts.LibPath); err != nil {
+		return nil, err
+	}
+
+	cparams := whisper.ContextDefaultParams()
+	ctx, err := whisper.InitFromFileWithParams(opts.ModelPath, cparams)
 	if err != nil {
 		return nil, err
 	}
@@ -68,13 +79,15 @@ func New(opts Options) (*HotMic, error) {
 	return &HotMic{
 		key:      opts.Key,
 		language: opts.Language,
-		model:    model,
+		ctx:      ctx,
 	}, nil
 }
 
-// Close releases the whisper model resources.
+// Close releases the whisper model resources. Safe to call more than once.
 func (h *HotMic) Close() error {
-	return h.model.Close()
+	whisper.Free(h.ctx)
+	h.ctx = 0
+	return nil
 }
 
 // Listen opens /dev/tty for key reading, puts it into raw mode, and starts
@@ -243,29 +256,31 @@ func captureAudio(stop <-chan struct{}, out chan<- []float32) {
 
 // transcribe converts raw mono float32 PCM samples (at whisper.SampleRate) to text.
 func (h *HotMic) transcribe(samples []float32) (string, error) {
-	wctx, err := h.model.NewContext()
-	if err != nil {
-		return "", err
-	}
-	if wctx.IsMultilingual() {
-		if err := wctx.SetLanguage(h.language); err != nil {
+	wparams := whisper.FullDefaultParams(whisper.SamplingGreedy)
+	wparams.PrintProgress = 0
+	wparams.PrintRealtime = 0
+	wparams.PrintTimestamps = 0
+	wparams.NoTimestamps = 1
+
+	var refs whisper.StringRefs
+	if whisper.IsMultilingual(h.ctx) {
+		lang := h.language
+		if lang == "auto" {
+			lang = ""
+		}
+		if err := refs.SetLanguage(&wparams, lang); err != nil {
 			return "", err
 		}
 	}
-	if err := wctx.Process(samples, nil, nil); err != nil {
+	defer refs.KeepAlive()
+
+	if err := whisper.Full(h.ctx, wparams, samples); err != nil {
 		return "", err
 	}
 
 	var sb strings.Builder
-	for {
-		seg, err := wctx.NextSegment()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return "", err
-		}
-		sb.WriteString(seg.Text)
+	for i := int32(0); i < whisper.FullNSegments(h.ctx); i++ {
+		sb.WriteString(whisper.FullGetSegmentText(h.ctx, i))
 	}
 
 	return strings.TrimSpace(sb.String()), nil
