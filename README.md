@@ -1,8 +1,8 @@
 # Talking Heads From The Year 2053
 
-![Talking Heads From The Year 2053 at Gophercon 2024](./images/gophercon-2024-talking-heads.jpg)
+![Talking Heads From The Year 2053](./images/talking-heads.jpg)
 
-A Fantastical Interaction Between Machines From The Future and Their Pet Human
+Conversations With Our Future Robot Overlords (and their pet human).
 
 ## Architecture
 
@@ -39,6 +39,8 @@ speaking-- subscribe -->actors
 ```
 
 ### Actor
+
+![actor application](./images/actor.png)
 
 Actor runs on the Linux part of an Arduino UNO Q board. It is written in Go with [yzma](https://github.com/hybridgroup/yzma) to perform local inference using [llama.cpp](https://github.com/ggml-org/llama.cpp). It communicates with other Actors by publishing and subscribing to [MQTT](https://mqtt.org/) messages.
 
@@ -95,6 +97,8 @@ end
 
 ### Director
 
+![director application](./images/director.png)
+
 Director runs on a separate computer that is connected to the same local network as the MQTT broker. It uses [ardanlabs/bucky](https://github.com/ardanlabs/bucky) with a local [whisper.cpp](https://github.com/ggml-org/whisper.cpp) shared library to perform "push to talk" to communicate with Actors.
 
 ```mermaid
@@ -117,6 +121,8 @@ director -- publish --> say
 ```
 
 ### Dialogue
+
+![dialogue application](./images/dialogue.png)
 
 Dialogue runs on a separate computer that is connected to the same local network as the MQTT broker. It uses the [sayanything](https://github.com/hybridgroup/go-sayanything) package with the [Piper](https://github.com/rhasspy/piper) Text To Speech engine to create audio output for everything said by Actors.
 
