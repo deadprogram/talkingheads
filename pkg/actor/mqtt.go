@@ -2,6 +2,7 @@ package actor
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"regexp"
 	"sync"
@@ -27,6 +28,24 @@ type MQTTListener struct {
 	closeOnce    sync.Once
 	verbose      bool
 	preprocessCB func(*[]message.Message)
+	eventsCh     chan<- string
+}
+
+// SetEventsCh registers a channel that receives human-readable event strings
+// (e.g. received directions). Must be called before the actor starts running.
+func (l *MQTTListener) SetEventsCh(ch chan<- string) {
+	l.eventsCh = ch
+}
+
+// emit sends a message to eventsCh when set, without blocking.
+func (l *MQTTListener) emit(msg string) {
+	if l.eventsCh == nil {
+		return
+	}
+	select {
+	case l.eventsCh <- msg:
+	default:
+	}
 }
 
 // NewMQTTListener connects to the broker, subscribes to "direction/<name>" for
@@ -110,6 +129,7 @@ func (l *MQTTListener) handleDirection(_ mqtt.Client, msg mqtt.Message) {
 	if l.verbose {
 		log.Printf("Received direction message from Director: %s\n", a.What)
 	}
+	l.emit(fmt.Sprintf("Director: %q", a.What))
 	l.enqueue(a.What)
 }
 

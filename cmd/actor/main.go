@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"log"
@@ -11,6 +10,7 @@ import (
 	"strings"
 	"syscall"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/deadprogram/talkingheads/pkg/actor"
 	"github.com/hybridgroup/yzma/pkg/download"
 	"github.com/hybridgroup/yzma/pkg/message"
@@ -175,11 +175,7 @@ func main() {
 }
 
 func run(c *cli.Context) error {
-	fmt.Print("\033[H\033[2J")
 	name := c.String("name")
-	fmt.Print(makeBanner(name))
-	fmt.Println()
-
 	modelURL := c.String("model-url")
 	processor := c.String("processor")
 	updateInstall := c.Bool("update-install")
@@ -273,6 +269,10 @@ func run(c *cli.Context) error {
 	cfg.MaxSentences = c.Int("max-sentences")
 	cfg.Verbose = verbose
 
+	eventsCh := make(chan string, 64)
+
+	var inputCh chan string // non-nil in stdin mode
+
 	if server != "" {
 		var err error
 		ml, err = actor.NewMQTTListener(name, server, commander, cfg.PauseWords, verbose)
@@ -285,25 +285,29 @@ func run(c *cli.Context) error {
 			<-ctx.Done()
 			ml.Close()
 		}()
+		ml.SetEventsCh(eventsCh)
 		moreFunc = ml.MoreFunc()
-		outputFunc = ml.OutputFunc()
+		baseOutput := ml.OutputFunc()
+		outputFunc = func(content string) {
+			eventsCh <- content
+			baseOutput(content)
+		}
 		log.Printf("MQTT mode: listening on direction/%s, publishing to speak/%s\n", name, name)
 	} else {
-		scanner := bufio.NewScanner(os.Stdin)
+		inputCh = make(chan string, 1)
 		moreFunc = func(conversation *[]message.Message) {
-			fmt.Print("\nYou: ")
-			if !scanner.Scan() {
+			select {
+			case line := <-inputCh:
+				if line == "" {
+					return
+				}
+				*conversation = append(*conversation, message.Chat{Role: "user", Content: line})
+			case <-ctx.Done():
 				stop()
-				return
 			}
-			line := scanner.Text()
-			if line == "" {
-				return
-			}
-			*conversation = append(*conversation, message.Chat{Role: "user", Content: line})
 		}
 		outputFunc = func(content string) {
-			fmt.Printf("\nActor: %s\n", content)
+			eventsCh <- content
 		}
 	}
 
@@ -322,9 +326,34 @@ func run(c *cli.Context) error {
 		ml.SetPreprocessCallback(a.PreprocessFunc(ctx))
 	}
 
-	fmt.Println("Actor ready. Use Ctrl+C or Ctrl+D to quit.")
+	// Signal "ready" into the viewport before handing off to the TUI.
+	eventsCh <- "ready"
 
-	if err := a.Run(ctx, systemPrompt); err != nil {
+	m := newTUIModel(makeBanner(name), name, filepath.Base(modelURL), eventsCh, inputCh)
+	p := tea.NewProgram(m, tea.WithAltScreen())
+
+	// Forward OS signals into the bubbletea program so that Ctrl+C / SIGTERM
+	// both trigger a clean shutdown.
+	go func() {
+		<-ctx.Done()
+		p.Send(tea.Quit())
+	}()
+
+	// Run the actor loop in the background; it will block until ctx is done or
+	// a fatal error occurs.
+	actorErrCh := make(chan error, 1)
+	go func() {
+		actorErrCh <- a.Run(ctx, systemPrompt)
+	}()
+
+	// Block on the TUI; returns when the user presses Ctrl+C or ctx is done.
+	if _, err := p.Run(); err != nil {
+		return cli.Exit(err, 1)
+	}
+
+	// Cancel the context so the actor loop exits, then collect its result.
+	stop()
+	if err := <-actorErrCh; err != nil && ctx.Err() == nil {
 		return cli.Exit(err, 1)
 	}
 
