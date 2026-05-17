@@ -10,6 +10,25 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+// ── chanWriter ────────────────────────────────────────────────────────────────
+
+// chanWriter implements io.Writer by forwarding each write as a trimmed string
+// to the events channel. Used to redirect log output into the TUI viewport.
+type chanWriter struct {
+	ch chan<- string
+}
+
+func (w *chanWriter) Write(p []byte) (int, error) {
+	msg := strings.TrimRight(string(p), "\n")
+	if msg != "" {
+		select {
+		case w.ch <- msg:
+		default:
+		}
+	}
+	return len(p), nil
+}
+
 // ── styles ────────────────────────────────────────────────────────────────────
 
 var (

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/signal"
@@ -139,6 +140,10 @@ func serveAction(c *cli.Context) error {
 	listener.SetEventsCh(eventsCh)
 
 	go listener.Listen()
+
+	// Silence log output once the TUI takes over — meaningful events are
+	// already forwarded through eventsCh.
+	log.SetOutput(io.Discard)
 
 	m := newTUIModel(banner, eventsCh, voiceNames)
 	p := tea.NewProgram(m, tea.WithAltScreen())

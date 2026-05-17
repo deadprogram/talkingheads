@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/signal"
@@ -324,6 +325,13 @@ func run(c *cli.Context) error {
 
 	if ml != nil {
 		ml.SetPreprocessCallback(a.PreprocessFunc(ctx))
+	}
+
+	// Redirect log output: into the viewport when verbose, silenced otherwise.
+	if verbose {
+		log.SetOutput(&chanWriter{ch: eventsCh})
+	} else {
+		log.SetOutput(io.Discard)
 	}
 
 	// Signal "ready" into the viewport before handing off to the TUI.
