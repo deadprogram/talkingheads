@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
@@ -8,6 +9,7 @@ import (
 	"strings"
 	"syscall"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/deadprogram/talkingheads/pkg/dialogue"
 	"github.com/urfave/cli/v2"
 )
@@ -106,15 +108,12 @@ func main() {
 }
 
 func serveAction(c *cli.Context) error {
-	fmt.Print("\033[H\033[2J")
-	fmt.Print(banner)
-	fmt.Println()
-
 	server := c.String("server")
 	dataDir := c.String("data")
 	gpu := c.Bool("gpu")
 	verbose := c.Bool("verbose")
 
+	var voiceNames []string
 	voices := make(map[string]*dialogue.Voice)
 	for _, spec := range c.StringSlice("voice") {
 		parts := strings.SplitN(spec, ":", 3)
@@ -127,6 +126,7 @@ func serveAction(c *cli.Context) error {
 			return cli.Exit(fmt.Sprintf("failed to create voice %q: %v", name, err), 1)
 		}
 		voices[name] = v
+		voiceNames = append(voiceNames, name)
 	}
 
 	listener, err := dialogue.NewListener("dialogue", server, voices, verbose)
@@ -135,14 +135,23 @@ func serveAction(c *cli.Context) error {
 	}
 	defer listener.Close()
 
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	eventsCh := make(chan string, 64)
+	listener.SetEventsCh(eventsCh)
 
 	go listener.Listen()
 
-	<-sigCh
-	log.Println("shutting down")
-	return nil
+	m := newTUIModel(banner, eventsCh, voiceNames)
+	p := tea.NewProgram(m, tea.WithAltScreen())
+
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer cancel()
+	go func() {
+		<-ctx.Done()
+		p.Send(tea.Quit())
+	}()
+
+	_, err = p.Run()
+	return err
 }
 
 func sayAction(c *cli.Context) error {

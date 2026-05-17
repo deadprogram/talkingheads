@@ -3,6 +3,7 @@ package dialogue
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"time"
 
@@ -17,6 +18,24 @@ type Listener struct {
 	voices      map[string]*Voice
 	verbose     bool
 	publishCh   chan publishMsg
+	eventsCh    chan<- string
+}
+
+// SetEventsCh registers a channel that receives human-readable event strings
+// (e.g. speech dispatches, warnings). Must be called before Listen().
+func (m *Listener) SetEventsCh(ch chan<- string) {
+	m.eventsCh = ch
+}
+
+// emit sends a message to eventsCh when it is set, without blocking.
+func (m *Listener) emit(msg string) {
+	if m.eventsCh == nil {
+		return
+	}
+	select {
+	case m.eventsCh <- msg:
+	default:
+	}
 }
 
 type publishMsg struct {
@@ -156,9 +175,11 @@ func (m *Listener) Listen() {
 			log.Printf("Received something said: %s\n", s.What)
 		}
 		if voice, ok := m.voices[s.Who]; ok {
+			m.emit(fmt.Sprintf("→ %s: %q", s.Who, s.What))
 			queue <- playRequest{voice: voice, who: s.Who, what: s.What}
 		} else {
 			log.Printf("WARNING: No voice found for %s\n", s.Who)
+			m.emit(fmt.Sprintf("WARNING: no voice for %q", s.Who))
 		}
 	}
 	close(queue)
