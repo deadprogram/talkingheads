@@ -7,7 +7,9 @@ import (
 	"io"
 	"log"
 	"os"
+	"runtime"
 	"strings"
+	"sync"
 
 	"github.com/ardanlabs/bucky/pkg/whisper"
 	portaudio "github.com/gordonklaus/portaudio"
@@ -34,6 +36,11 @@ type HotMic struct {
 	key      rune
 	language string
 	ctx      whisper.Context
+
+	// recording state (protected by mu)
+	mu        sync.Mutex
+	stopRec   chan struct{}
+	samplesCh chan []float32
 }
 
 // Options configures a HotMic instance.
@@ -88,6 +95,74 @@ func (h *HotMic) Close() error {
 	whisper.Free(h.ctx)
 	h.ctx = 0
 	return nil
+}
+
+// StartCapture begins audio capture from the default microphone.
+//
+// The entire PortAudio lifecycle (Initialize → stream read loop → Terminate)
+// runs on a single OS thread that is pinned with runtime.LockOSThread, which
+// satisfies the requirement of audio backends (ALSA, PulseAudio, CoreAudio)
+// that all calls happen on the same thread.
+//
+// StartCapture blocks only until PortAudio has been initialised; it returns
+// an error if capture is already in progress or if PortAudio cannot start.
+func (h *HotMic) StartCapture() error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	if h.stopRec != nil {
+		return fmt.Errorf("hotmic: capture already in progress")
+	}
+
+	ready := make(chan error, 1)
+	h.stopRec = make(chan struct{})
+	h.samplesCh = make(chan []float32, 1)
+
+	stop := h.stopRec
+	samples := h.samplesCh
+
+	go func() {
+		// Pin this goroutine to its OS thread so that portaudio.Initialize,
+		// all stream operations, and portaudio.Terminate all run on the same
+		// underlying thread.
+		runtime.LockOSThread()
+		defer runtime.UnlockOSThread()
+
+		if err := portaudio.Initialize(); err != nil {
+			ready <- fmt.Errorf("hotmic: portaudio init: %w", err)
+			return
+		}
+		ready <- nil
+
+		captureAudio(stop, samples)
+
+		if err := portaudio.Terminate(); err != nil {
+			log.Printf("hotmic: portaudio terminate: %v", err)
+		}
+	}()
+
+	return <-ready
+}
+
+// StopCapture signals the capture goroutine to stop and blocks until the
+// collected PCM samples are returned. portaudio.Terminate is called by the
+// capture goroutine itself (on the same OS thread) after samples are
+// delivered. Returns an error if no capture is in progress.
+func (h *HotMic) StopCapture() ([]float32, error) {
+	h.mu.Lock()
+	stop := h.stopRec
+	ch := h.samplesCh
+	h.stopRec = nil
+	h.samplesCh = nil
+	h.mu.Unlock()
+
+	if stop == nil {
+		return nil, fmt.Errorf("hotmic: no capture in progress")
+	}
+
+	close(stop)
+	samples := <-ch // wait for captureAudio to finish and portaudio to terminate
+	return samples, nil
 }
 
 // Listen opens /dev/tty for key reading, puts it into raw mode, and starts
@@ -254,7 +329,13 @@ func captureAudio(stop <-chan struct{}, out chan<- []float32) {
 	}
 }
 
-// transcribe converts raw mono float32 PCM samples (at whisper.SampleRate) to text.
+// Transcribe converts raw mono float32 PCM samples (at whisper.SampleRate) to text.
+// It is safe to call concurrently with StartCapture/StopCapture.
+func (h *HotMic) Transcribe(samples []float32) (string, error) {
+	return h.transcribe(samples)
+}
+
+// transcribe is the internal implementation of Transcribe.
 func (h *HotMic) transcribe(samples []float32) (string, error) {
 	wparams := whisper.FullDefaultParams(whisper.SamplingGreedy)
 	wparams.PrintProgress = 0

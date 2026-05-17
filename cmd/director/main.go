@@ -9,6 +9,8 @@ import (
 	"strings"
 	"syscall"
 
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/deadprogram/talkingheads/pkg/hotmic"
 	"github.com/urfave/cli/v2"
 )
 
@@ -62,8 +64,8 @@ func RunCLI(version string) error {
 			},
 			&cli.StringFlag{
 				Name:  "hotmic-key",
-				Usage: "keyboard character that toggles hotmic recording on/off",
-				Value: " ",
+				Usage: "bubbletea key name that toggles hotmic recording on/off (e.g. f5, f1, ctrl+r)",
+				Value: "f5",
 			},
 			&cli.Float64Flag{
 				Name:  "hotmic-fuzzy-threshold",
@@ -76,10 +78,6 @@ func RunCLI(version string) error {
 			},
 		},
 		Action: func(c *cli.Context) error {
-			fmt.Print("\033[H\033[2J")
-			fmt.Print(banner)
-			fmt.Println()
-
 			if c.String("server") == "" {
 				log.Fatal("server is required")
 			}
@@ -88,12 +86,6 @@ func RunCLI(version string) error {
 			if len(actors) == 0 {
 				log.Fatal("at least one --actor is required")
 			}
-			conv, err := newConversation(c.String("server"))
-			if err != nil {
-				log.Fatal(err)
-			}
-
-			go conv.processQuestions()
 
 			for _, entry := range c.StringSlice("hotmic-actor-alias") {
 				parts := strings.SplitN(entry, ":", 2)
@@ -108,15 +100,43 @@ func RunCLI(version string) error {
 				}
 			}
 
+			fuzzyThreshold = c.Float64("hotmic-fuzzy-threshold")
+
+			conv, err := newConversation(c.String("server"))
+			if err != nil {
+				log.Fatal(err)
+			}
+			defer conv.Close()
+
+			go conv.processQuestions()
+
+			// Optional hotmic setup.
+			var mic *hotmic.HotMic
 			if modelPath := c.String("hotmic-model"); modelPath != "" {
-				key := rune(c.String("hotmic-key")[0])
-				fuzzyThreshold = c.Float64("hotmic-fuzzy-threshold")
-				ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-				defer cancel()
-				return startHotMicInput(ctx, conv.questions, modelPath, c.String("hotmic-lang"), key)
+				mic, err = hotmic.New(hotmic.Options{
+					ModelPath: modelPath,
+					Language:  c.String("hotmic-lang"),
+				})
+				if err != nil {
+					return fmt.Errorf("hotmic init: %w", err)
+				}
+				defer mic.Close()
 			}
 
-			return startKeyboardInput(conv.questions)
+			m := newTUIModel(banner, conv.questions, mic, c.String("hotmic-key"))
+			p := tea.NewProgram(m, tea.WithAltScreen())
+
+			// Forward OS signals into the bubbletea program so that Ctrl+C and
+			// SIGTERM both trigger a clean shutdown.
+			ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+			defer cancel()
+			go func() {
+				<-ctx.Done()
+				p.Send(tea.Quit())
+			}()
+
+			_, err = p.Run()
+			return err
 		},
 	}
 

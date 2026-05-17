@@ -1,60 +1,38 @@
 package main
 
 import (
-	"bufio"
 	"fmt"
-	"log"
-	"os"
 	"slices"
 	"strings"
-	"time"
 )
 
-func startKeyboardInput(questions chan question) error {
-	displayQuestion()
-
-	scanner := bufio.NewScanner(os.Stdin)
-	for scanner.Scan() {
-		text := scanner.Text()
-		if len(text) == 0 {
-			time.Sleep(100 * time.Millisecond)
-			continue
-		}
-
-		var query string
-		first := strings.Split(text, " ")[0]
-		to := strings.TrimSuffix(first, ":")
-		to = strings.TrimSuffix(to, ",")
-		to = strings.ToLower(to)
-
-		switch {
-		case slices.Contains(actors, to):
-			query = strings.TrimPrefix(text, first)
-			displayQuestion()
-		default:
-			fmt.Println("unknown actor. try again:", actors)
-			continue
-		}
-
-		kind := kindDirection
-		content := strings.TrimSpace(query)
-		if rest, ok := stripSayPrefix(content); ok {
-			kind = kindSay
-			content = trimSurroundingQuotes(rest)
-		}
-
-		questions <- question{To: to, Content: content, Kind: kind}
+// parseTypedInput parses a line of text typed by the user into a question.
+// The expected format is "<actor>[: ,] <content>", optionally prefixed by
+// "say" to produce a kindSay question. Returns an error if the actor cannot
+// be identified.
+func parseTypedInput(text string, actorList []string) (question, error) {
+	if len(text) == 0 {
+		return question{}, fmt.Errorf("empty input")
 	}
 
-	if err := scanner.Err(); err != nil {
-		log.Fatal(err)
+	first := strings.Split(text, " ")[0]
+	to := strings.TrimSuffix(first, ":")
+	to = strings.TrimSuffix(to, ",")
+	to = strings.ToLower(to)
+
+	if !slices.Contains(actorList, to) {
+		return question{}, fmt.Errorf("unknown actor %q — expected one of %v", to, actorList)
 	}
 
-	return nil
-}
+	query := strings.TrimSpace(strings.TrimPrefix(text, first))
+	kind := kindDirection
+	content := query
+	if rest, ok := stripSayPrefix(content); ok {
+		kind = kindSay
+		content = trimSurroundingQuotes(rest)
+	}
 
-func displayQuestion() {
-	fmt.Printf("Enter a question for an actor %v:\n", actors)
+	return question{To: to, Content: content, Kind: kind}, nil
 }
 
 // stripSayPrefix returns the remainder of s with the leading "say" word

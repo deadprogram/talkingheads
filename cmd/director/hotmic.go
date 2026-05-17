@@ -1,72 +1,8 @@
 package main
 
 import (
-	"context"
-	"fmt"
 	"strings"
-
-	"github.com/deadprogram/talkingheads/pkg/hotmic"
 )
-
-func startHotMicInput(ctx context.Context, questions chan question, modelPath, lang string, key rune) error {
-	mic, err := hotmic.New(hotmic.Options{
-		Key:       key,
-		ModelPath: modelPath,
-		Language:  lang,
-	})
-	if err != nil {
-		return err
-	}
-	defer mic.Close()
-
-	texts, err := mic.Listen(ctx)
-	if err != nil {
-		return err
-	}
-
-	// \r\n required: terminal is in raw mode at this point.
-	fmt.Printf("hotmic ready — press the toggle key to record, speak \"<actor>: <question>\", press again to transcribe\r\n")
-
-	for text := range texts {
-		if text == "" {
-			continue
-		}
-
-		// Split on the first separator between the actor name and the
-		// question body. Whisper may transcribe a punctuation separator
-		// (':', ',', '?', '.') or may omit it entirely, in which case we
-		// fall back to the first whitespace.
-		idx := strings.IndexAny(text, ":,?. \t")
-		if idx < 0 {
-			fmt.Printf("\rhotmic: no actor separator in %q\r\n", text)
-			continue
-		}
-		nameRaw := strings.ToLower(strings.TrimSpace(text[:idx]))
-		content := strings.TrimSpace(text[idx+1:])
-
-		to, ok := matchActor(nameRaw)
-		if !ok {
-			fmt.Printf("\rhotmic: unknown actor %q in %q — expected one of %v\r\n", nameRaw, text, actors)
-			continue
-		}
-
-		kind := kindDirection
-		if rest, isSay := stripSayPrefix(content); isSay {
-			kind = kindSay
-			content = trimSurroundingQuotes(rest)
-		}
-
-		fmt.Printf("\rhotmic: got question for %s: %q\r\n", to, content)
-
-		select {
-		case questions <- question{To: to, Content: content, Kind: kind}:
-		case <-ctx.Done():
-			return nil
-		}
-	}
-
-	return nil
-}
 
 // matchActor finds the actor whose name best matches spoken.
 // It normalises both sides (lowercase, alphanumeric only) and applies three
