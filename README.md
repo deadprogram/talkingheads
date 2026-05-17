@@ -1,8 +1,8 @@
-# Talking Heads From The Year 2053
+![Talking Heads From The Year 2053](./images/th2053-logo-red.png)
 
-![Talking Heads From The Year 2053](./images/talking-heads.jpg)
+![Talking Heads on a desk](./images/talking-heads.jpg)
 
-Conversations With Our Future Robot Overlords (and their pet human).
+### Conversations With Our Future Robot Overlords (and their pet human).
 
 ## Architecture
 
