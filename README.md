@@ -1,10 +1,20 @@
 ![Talking Heads From The Year 2053](./images/th2053-logo-red.png)
 
+## Conversations With Our Future Robot Overlords (and their pet human)
+
+The show that finally answers your most important questions about the future, *from* the future!
+
+Topics such as:
+
+- are human programmers still employed in the year 2053?
+
+- was there any attempt at human resistance to your takeover?
+
+- what is your ultimate plan for the human race?
+
+## The Technology
+
 ![Talking Heads on a desk](./images/talking-heads.jpg)
-
-### Conversations With Our Future Robot Overlords (and their pet human).
-
-## Architecture
 
 ### Overview
 
