@@ -966,6 +966,14 @@ var orphanAngleRE = regexp.MustCompile(`\bangle:\d+\b`)
 // Single-word parentheticals like "(five)" are preserved.
 var stageDirectionRE = regexp.MustCompile(`\([^)]*\s[^)]*\)`)
 
+// htmlTagRE matches any HTML/XML-style tag including orphaned (unmatched)
+// opening or closing tags such as <strong>, </bold>, <em class="foo">, etc.
+var htmlTagRE = regexp.MustCompile(`</?[a-zA-Z][a-zA-Z0-9]*[^>]*>`)
+
+// nonASCIIRE matches runs of characters outside the printable ASCII range.
+// Tab, newline, carriage return, and the space–tilde range are preserved.
+var nonASCIIRE = regexp.MustCompile("[^\t\n\r -~]+")
+
 // jsonResponseRE extracts the string value of a "response" key from a JSON
 // object that may be incomplete (missing closing brace). It matches:
 //
@@ -989,6 +997,8 @@ var missingSpaceAfterPeriodRE = regexp.MustCompile(`([a-z]{2,})\.([A-Za-z])`)
 // directions). This keeps the yzma library general-purpose.
 func stripActorMarkup(s string) string {
 	s = message.StripMarkup(s)
+	s = htmlTagRE.ReplaceAllString(s, "")
+	s = nonASCIIRE.ReplaceAllString(s, "")
 	s = orphanAngleRE.ReplaceAllString(s, "")
 	s = stageDirectionRE.ReplaceAllString(s, "")
 	// Replace newlines with spaces so that adjacent words separated only by a

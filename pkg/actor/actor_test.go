@@ -228,6 +228,65 @@ func TestStripActorMarkup_MissingSpaceAfterPeriod(t *testing.T) {
 	}
 }
 
+// TestStripActorMarkup_HTMLTags verifies that HTML/XML tags are removed,
+// including orphaned opening and closing tags with no matching counterpart.
+func TestStripActorMarkup_HTMLTags(t *testing.T) {
+	cases := []struct {
+		input string
+		want  string
+	}{
+		// Matched pairs.
+		{"<strong>hello</strong>", "hello"},
+		{"<em>world</em>", "world"},
+		// Orphaned opening tag.
+		{"<strong>hello", "hello"},
+		// Orphaned closing tag.
+		{"hello</bold>", "hello"},
+		// Tags with attributes.
+		{`<span class="foo">text</span>`, "text"},
+		// Multiple tags.
+		{"<b>one</b> and <i>two</i>", "one and two"},
+		// Nested orphans.
+		{"</strong>some text<br>here", "some texthere"},
+		// No tags — unchanged.
+		{"plain text", "plain text"},
+	}
+	for _, c := range cases {
+		got := stripActorMarkup(c.input)
+		if got != c.want {
+			t.Errorf("stripActorMarkup(%q) = %q, want %q", c.input, got, c.want)
+		}
+	}
+}
+
+// TestStripActorMarkup_NonEnglish verifies that characters outside the
+// printable ASCII range are removed.
+func TestStripActorMarkup_NonEnglish(t *testing.T) {
+	cases := []struct {
+		input string
+		want  string
+	}{
+		// Accented / Latin-extended characters.
+		{"caf\u00e9", "caf"},
+		{"na\u00efve", "nave"},
+		// Non-Latin scripts.
+		{"hello \u4e16\u754c", "hello"},
+		{"\u0645\u0631\u062d\u0628\u0627 world", "world"},
+		// Emoji.
+		{"great job \U0001f44d", "great job"},
+		// Mixed: only ASCII kept.
+		{"It\u2019s fine", "Its fine"},
+		// Pure ASCII passes through unchanged.
+		{"Hello, world!", "Hello, world!"},
+	}
+	for _, c := range cases {
+		got := stripActorMarkup(c.input)
+		if got != c.want {
+			t.Errorf("stripActorMarkup(%q) = %q, want %q", c.input, got, c.want)
+		}
+	}
+}
+
 // TestTruncateToSentences verifies that the helper caps the number of
 // sentences in its input and drops any partial trailing sentence.
 func TestTruncateToSentences(t *testing.T) {
