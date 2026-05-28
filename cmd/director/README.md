@@ -31,13 +31,22 @@ Typed commands and voice (hotmic) input work simultaneously in the same session.
 
 ## MQTT message format
 
-Questions are published to `direction/<name>` as JSON:
+Directions are published to `direction/<name>` as JSON. Payload types are defined in `pkg/commands`.
 
+Normal direction:
 ```json
 {"who": "llama3000", "what": "What is the meaning of life?"}
 ```
 
-Payload types are defined in `pkg/commands`.
+Respond direction — instructs the Actor to reply to the last Actor it heard speak:
+```json
+{"who": "gemmai", "respond": true}
+```
+
+Respond direction with optional guidance:
+```json
+{"who": "gemmai", "what": "Keep it brief.", "respond": true}
+```
 
 ## Typed input
 
@@ -52,6 +61,14 @@ Prefix with `say` to speak text out-of-band without adding it to the actor's con
 
 ```
 gemmai: say "welcome to the show"
+```
+
+Prefix with `respond` to instruct the Actor to reply directly to the last Actor it heard speak. Optional guidance text can follow:
+
+```
+gemmai respond
+gemmai respond: keep it short
+phineas respond keep it philosophical
 ```
 
 ## Hotmic input

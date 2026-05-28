@@ -30,6 +30,9 @@ func parseTypedInput(text string, actorList []string) (question, error) {
 	if rest, ok := stripSayPrefix(content); ok {
 		kind = kindSay
 		content = trimSurroundingQuotes(rest)
+	} else if rest, ok := stripRespondPrefix(content); ok {
+		kind = kindRespond
+		content = strings.TrimSpace(rest)
 	}
 
 	return question{To: to, Content: content, Kind: kind}, nil
@@ -55,6 +58,32 @@ func stripSayPrefix(s string) (string, bool) {
 	}
 	word = strings.TrimRight(word, ":,")
 	if !strings.EqualFold(word, "say") {
+		return s, false
+	}
+	return strings.TrimSpace(rest), true
+}
+
+// stripRespondPrefix returns the remainder of s with the leading "respond"
+// word removed (case-insensitive) and reports whether the prefix was present.
+// Trailing punctuation directly after "respond" (e.g. "respond:" or
+// "respond,") is tolerated. The remainder is an optional extra prompt; an
+// empty remainder is valid and means the Actor responds without additional guidance.
+func stripRespondPrefix(s string) (string, bool) {
+	trimmed := strings.TrimSpace(s)
+	if trimmed == "" {
+		return s, false
+	}
+	space := strings.IndexAny(trimmed, " \t")
+	var word, rest string
+	if space < 0 {
+		word = trimmed
+		rest = ""
+	} else {
+		word = trimmed[:space]
+		rest = trimmed[space+1:]
+	}
+	word = strings.TrimRight(word, ":,")
+	if !strings.EqualFold(word, "respond") {
 		return s, false
 	}
 	return strings.TrimSpace(rest), true

@@ -2,9 +2,13 @@ package commands
 
 // Direction is the payload for the ask/# MQTT topic.
 // It represents a question from the Director to an Actor.
+// When Respond is true the Actor should respond directly to the last Actor
+// that spoke, using What as an optional additional prompt; if What is empty
+// the Actor generates a response based on the conversation context alone.
 type Direction struct {
-	Who  string `json:"who"`
-	What string `json:"what"`
+	Who     string `json:"who"`
+	What    string `json:"what"`
+	Respond bool   `json:"respond,omitempty"`
 }
 
 // Speak is the payload for the speak/# MQTT topic.

@@ -18,6 +18,9 @@ const (
 	// kindSay publishes commands.Say to say/<actor>; the utterance is spoken
 	// by Dialogue but is not added to any Actor's conversation history.
 	kindSay
+	// kindRespond publishes commands.Direction with Respond=true to
+	// direction/<actor>, instructing the Actor to respond to the last speaker.
+	kindRespond
 )
 
 type question struct {
@@ -63,6 +66,9 @@ func (c *conversation) processQuestions() error {
 		case kindSay:
 			topic = "say/" + question.To
 			payload, err = json.Marshal(commands.Say{Who: question.To, What: question.Content})
+		case kindRespond:
+			topic = "direction/" + question.To
+			payload, err = json.Marshal(commands.Direction{Who: question.To, What: question.Content, Respond: true})
 		default:
 			topic = "direction/" + question.To
 			payload, err = json.Marshal(commands.Direction{Who: question.To, What: question.Content})
