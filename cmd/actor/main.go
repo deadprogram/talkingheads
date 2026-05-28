@@ -151,6 +151,11 @@ func main() {
 				Usage: "DRY repetition penalty multiplier (0.0 = disabled; try 0.8 to curb looping)",
 				Value: float64(actor.DefaultDryMultiplier),
 			},
+			&cli.StringFlag{
+				Name:    "pause-words-file",
+				Usage:   "path to a file containing pause phrases, one per line (overrides built-in defaults)",
+				Aliases: []string{"pw"},
+			},
 			&cli.IntFlag{
 				Name:  "pause-interval",
 				Usage: "seconds between repeated pause words while waiting for the model's first token (0 = use default)",
@@ -270,6 +275,14 @@ func run(c *cli.Context) error {
 	cfg.PauseInterval = c.Int("pause-interval")
 	cfg.MaxSentences = c.Int("max-sentences")
 	cfg.Verbose = verbose
+
+	if pwFile := c.String("pause-words-file"); pwFile != "" {
+		words, err := loadPauseWords(pwFile)
+		if err != nil {
+			return cli.Exit(fmt.Sprintf("failed to load pause words file: %v", err), 1)
+		}
+		cfg.PauseWords = words
+	}
 
 	eventsCh := make(chan string, 64)
 
@@ -396,6 +409,25 @@ func parseModelFormat(s string) message.Format {
 	default:
 		return message.FormatAuto
 	}
+}
+
+// loadPauseWords reads a pause-phrases file and returns the phrases as a slice.
+// Each non-empty, non-comment line (lines not starting with '#') is a phrase.
+// Returns an error if the file cannot be read.
+func loadPauseWords(path string) ([]string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("reading pause words file %q: %w", path, err)
+	}
+	var words []string
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		words = append(words, line)
+	}
+	return words, nil
 }
 
 // buildSystemPrompt reads each file in paths and concatenates their contents,

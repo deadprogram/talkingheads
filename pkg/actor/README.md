@@ -80,7 +80,15 @@ Dialogue but are deliberately invisible to every Actor's conversation history.
 
 When another Actor publishes a sentence to `speak/<other>`, this Actor receives it via the `speak/#` subscription and adds it to the conversation as context. The heard speech is buffered and injected into the conversation immediately before the next Direction is processed — the Actor never responds to heard speech on its own.
 
-Pause words (filler phrases such as `"let me think..."`) are automatically filtered out and are never added to the conversation.
+Pause phrases (filler sentences spoken while the model is generating, such as `"let me think..."`) are published with `"thinking": true` in the JSON payload. Receiving Actors check this field and discard those messages — they are never added to the conversation context.
+
+### `speak` payload fields
+
+| Field | Type | Description |
+|---|---|---|
+| `who` | string | Name of the Actor that spoke |
+| `what` | string | The spoken text |
+| `thinking` | bool | `true` when the message is a pause phrase; omitted (false) for real speech |
 
 ### Speaking status
 
