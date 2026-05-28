@@ -2,6 +2,7 @@ package actor
 
 import (
 	"encoding/json"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -623,5 +624,124 @@ func TestHandleDirection_NoRespond_IgnoresLastSpeaker(t *testing.T) {
 		}
 	case <-time.After(time.Second):
 		t.Error("timed out waiting for incoming message")
+	}
+}
+
+// --- lookAngleFor ---
+
+func TestLookAngleFor_TwoActors(t *testing.T) {
+	// gemmai is left (index 0), phineas is right (index 1).
+	l := newTestListener("gemmai")
+	l.SetActorPositions([]string{"gemmai", "phineas"})
+
+	angle, ok := l.lookAngleFor("phineas")
+	if !ok {
+		t.Fatal("expected ok=true")
+	}
+	// phineas has higher index → to gemmai's left → angle > 90
+	if angle <= 90 {
+		t.Errorf("expected angle > 90 for actor to the left, got %d", angle)
+	}
+}
+
+func TestLookAngleFor_TwoActors_OtherDirection(t *testing.T) {
+	l := newTestListener("phineas")
+	l.SetActorPositions([]string{"gemmai", "phineas"})
+
+	angle, ok := l.lookAngleFor("gemmai")
+	if !ok {
+		t.Fatal("expected ok=true")
+	}
+	// gemmai has lower index → to phineas's right → angle < 90
+	if angle >= 90 {
+		t.Errorf("expected angle < 90 for actor to the right, got %d", angle)
+	}
+}
+
+func TestLookAngleFor_ThreeActors_Center(t *testing.T) {
+	l := newTestListener("phineas")
+	l.SetActorPositions([]string{"gemmai", "phineas", "qwentin"})
+
+	leftAngle, ok := l.lookAngleFor("qwentin")
+	if !ok {
+		t.Fatal("expected ok=true for qwentin")
+	}
+	rightAngle, ok := l.lookAngleFor("gemmai")
+	if !ok {
+		t.Fatal("expected ok=true for gemmai")
+	}
+	// qwentin is to the left → angle > 90; gemmai is to the right → angle < 90
+	if leftAngle <= 90 {
+		t.Errorf("expected leftAngle > 90, got %d", leftAngle)
+	}
+	if rightAngle >= 90 {
+		t.Errorf("expected rightAngle < 90, got %d", rightAngle)
+	}
+	// Symmetric around 90
+	if leftAngle+rightAngle != 180 {
+		t.Errorf("expected symmetric angles summing to 180, got %d+%d=%d", leftAngle, rightAngle, leftAngle+rightAngle)
+	}
+}
+
+func TestLookAngleFor_EmptyPositions_ReturnsFalse(t *testing.T) {
+	l := newTestListener("gemmai")
+	_, ok := l.lookAngleFor("phineas")
+	if ok {
+		t.Error("expected ok=false with no positions set")
+	}
+}
+
+func TestLookAngleFor_SinglePosition_ReturnsFalse(t *testing.T) {
+	l := newTestListener("gemmai")
+	l.SetActorPositions([]string{"gemmai"})
+	_, ok := l.lookAngleFor("phineas")
+	if ok {
+		t.Error("expected ok=false with only one actor in positions")
+	}
+}
+
+func TestLookAngleFor_UnknownSpeaker_ReturnsFalse(t *testing.T) {
+	l := newTestListener("gemmai")
+	l.SetActorPositions([]string{"gemmai", "phineas"})
+	_, ok := l.lookAngleFor("unknown")
+	if ok {
+		t.Error("expected ok=false for speaker not in positions")
+	}
+}
+
+// --- handleSpeak with actor positions ---
+
+func TestHandleSpeak_SendsSlowlook_WhenPositionsSet(t *testing.T) {
+	mc := &mockCommander{}
+	l := newTestListener("gemmai")
+	l.commander = mc
+	l.SetActorPositions([]string{"gemmai", "phineas"})
+
+	payload, _ := json.Marshal(commands.Speak{Who: "phineas", What: "hello"})
+	l.handleSpeak(nil, &mockMessage{payload: payload})
+
+	// Expect a slowlook command to have been sent.
+	if len(mc.sentCmds) == 0 {
+		t.Fatal("expected a slowlook command, got none")
+	}
+	cmd := mc.sentCmds[0]
+	if !strings.HasPrefix(cmd, "slowlook ") {
+		t.Errorf("expected command starting with 'slowlook ', got %q", cmd)
+	}
+}
+
+func TestHandleSpeak_NoSlowlook_WhenPositionsNotSet(t *testing.T) {
+	mc := &mockCommander{}
+	l := newTestListener("gemmai")
+	l.commander = mc
+	// actorPositions not set
+
+	payload, _ := json.Marshal(commands.Speak{Who: "phineas", What: "hello"})
+	l.handleSpeak(nil, &mockMessage{payload: payload})
+
+	for _, cmd := range mc.sentCmds {
+		if strings.HasPrefix(cmd, "slowlook") {
+			t.Errorf("unexpected slowlook command when positions not set: %q", cmd)
+		}
 	}
 }

@@ -24,6 +24,7 @@ One of `--model-url` or `--model-path` is required.
 | `--theme` | | | Personality color sent to the action firmware on startup (`red`, `green`, `blue`, `purple`, `orange`, `yellow`) |
 | `--pause-words-file` | `-pw` | | Path to a file of pause phrases, one per line; overrides the built-in defaults |
 | `--pause-interval` | | `5` | Seconds between repeated pause phrases while waiting for the model's first token |
+| `--actor-positions` | `-ap` | | Comma-separated left-to-right stage order of all actors as seen from the audience (e.g. `gemmai,phineas,qwentin`); pass the same value to every actor |
 
 ### Sampling flags
 
@@ -38,6 +39,16 @@ One of `--model-url` or `--model-path` is required.
 | `--presence-penalty` | `0.0` | Penalise tokens by presence (`0.0` disables) |
 | `--dry-multiplier` | `0.0` | DRY repetition penalty multiplier (`0.0` disables) |
 | `--max-sentences` | `0` | Cap the number of sentences spoken per turn (`0` = unlimited) |
+
+## Stage positioning
+
+When `--actor-positions` is set, each Actor turns to face the first Actor that speaks after it starts up. Pass the **same comma-separated list to every actor**, ordered left-to-right as the audience sees the stage:
+
+```sh
+--actor-positions gemmai,phineas,qwentin
+```
+
+The Actor looks up its own position in the list, then interpolates a `slowlook` servo angle in the range 45°–135° so it faces the direction of the speaking Actor. A speaker to the Actor's left produces a higher angle; one to the right produces a lower angle. Pause phrases (`thinking: true`) do not trigger a look.
 
 ## Pause phrases
 

@@ -18,24 +18,67 @@ import (
 // The published response payload is {"who":"<name>","what":"<content>"},
 // which is compatible with the speak/# subscription in pkg/dialogue.
 type MQTTListener struct {
-	name          string
-	commander     Commander
-	client        mqtt.Client
-	incoming      chan string
-	heard         chan string
-	done          chan struct{}
-	closeOnce     sync.Once
-	verbose       bool
-	preprocessCB  func(*[]message.Message)
-	eventsCh      chan<- string
-	lastSpeaker   string
-	lastSpeakerMu sync.RWMutex
+	name           string
+	commander      Commander
+	client         mqtt.Client
+	incoming       chan string
+	heard          chan string
+	done           chan struct{}
+	closeOnce      sync.Once
+	verbose        bool
+	preprocessCB   func(*[]message.Message)
+	eventsCh       chan<- string
+	lastSpeaker    string
+	lastSpeakerMu  sync.RWMutex
+	actorPositions []string
 }
 
 // SetEventsCh registers a channel that receives human-readable event strings
 // (e.g. received directions). Must be called before the actor starts running.
 func (l *MQTTListener) SetEventsCh(ch chan<- string) {
 	l.eventsCh = ch
+}
+
+// SetActorPositions records the left-to-right stage order of all actors as
+// seen from the audience (e.g. ["gemmai", "phineas", "qwentin"]). When set,
+// this Actor will issue a slowlook command towards any other Actor that starts
+// speaking. Pass nil or an empty slice to disable the behaviour.
+func (l *MQTTListener) SetActorPositions(positions []string) {
+	l.actorPositions = positions
+}
+
+// lookAngleFor returns the servo angle (0–180) that this Actor should use to
+// face the named speaker, and reports whether positioning data is available.
+// Actors are assumed to face the audience; 0° is full right, 90° is center,
+// 180° is full left from each Actor's own perspective. The angle is
+// interpolated across a ±45° range centred on 90°.
+func (l *MQTTListener) lookAngleFor(speaker string) (int, bool) {
+	if len(l.actorPositions) < 2 {
+		return 0, false
+	}
+	myIdx, speakerIdx := -1, -1
+	for i, name := range l.actorPositions {
+		if name == l.name {
+			myIdx = i
+		}
+		if name == speaker {
+			speakerIdx = i
+		}
+	}
+	if myIdx < 0 || speakerIdx < 0 || myIdx == speakerIdx {
+		return 0, false
+	}
+	n := len(l.actorPositions)
+	// Higher index = to this Actor's left (audience's right) → angle > 90.
+	// Lower index = to this Actor's right (audience's left) → angle < 90.
+	angle := 90 + int(float64(speakerIdx-myIdx)*45.0/float64(n-1))
+	if angle < 10 {
+		angle = 10
+	}
+	if angle > 170 {
+		angle = 170
+	}
+	return angle, true
 }
 
 // emit sends a message to eventsCh when set, without blocking.
@@ -201,6 +244,13 @@ func (l *MQTTListener) handleSpeak(_ mqtt.Client, msg mqtt.Message) {
 	l.lastSpeakerMu.Lock()
 	l.lastSpeaker = s.Who
 	l.lastSpeakerMu.Unlock()
+	if angle, ok := l.lookAngleFor(s.Who); ok {
+		if err := l.commander.Send(fmt.Sprintf("slowlook %d", angle)); err != nil {
+			if l.verbose {
+				log.Printf("failed to send slowlook command: %v\n", err)
+			}
+		}
+	}
 	if l.verbose {
 		log.Printf("Heard %s say: %s\n", s.Who, s.What)
 	}
