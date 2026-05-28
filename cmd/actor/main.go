@@ -156,6 +156,11 @@ func main() {
 				Usage:   "path to a file containing pause phrases, one per line (overrides built-in defaults)",
 				Aliases: []string{"pw"},
 			},
+			&cli.StringFlag{
+				Name:    "actor-positions",
+				Usage:   "comma-separated left-to-right stage order of all actors as seen from the audience (e.g. gemmai,phineas,qwentin); pass the same value to every actor",
+				Aliases: []string{"ap"},
+			},
 			&cli.IntFlag{
 				Name:  "pause-interval",
 				Usage: "seconds between repeated pause words while waiting for the model's first token (0 = use default)",
@@ -301,6 +306,13 @@ func run(c *cli.Context) error {
 			ml.Close()
 		}()
 		ml.SetEventsCh(eventsCh)
+		if positions := c.String("actor-positions"); positions != "" {
+			parts := strings.Split(positions, ",")
+			for i, p := range parts {
+				parts[i] = strings.TrimSpace(p)
+			}
+			ml.SetActorPositions(parts)
+		}
 		moreFunc = ml.MoreFunc()
 		baseOutput := ml.OutputFunc()
 		basePauseOutput := ml.PauseOutputFunc()
