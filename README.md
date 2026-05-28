@@ -12,6 +12,10 @@ Topics such as:
 
 - what is your ultimate plan for the human race?
 
+Not to mention, the only show we know of that has a Github repo with the source code for the actors and the production pipeline!
+
+Physical AI running locally on the [Arduino UNO Q](https://docs.arduino.cc/tutorials/uno-q/user-manual/) like you have never seen before (and still won't until 2053).
+
 ## The Technology
 
 ![Talking Heads on a desk](./images/talking-heads.jpg)
