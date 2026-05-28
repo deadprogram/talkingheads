@@ -23,7 +23,6 @@ type MQTTListener struct {
 	client       mqtt.Client
 	incoming     chan string
 	heard        chan string
-	pauseWords   map[string]bool
 	done         chan struct{}
 	closeOnce    sync.Once
 	verbose      bool
@@ -51,9 +50,7 @@ func (l *MQTTListener) emit(msg string) {
 // NewMQTTListener connects to the broker, subscribes to "direction/<name>" for
 // direct prompts and "speak/#" to hear other actors, and returns a
 // ready-to-use MQTTListener. If commander is nil, a LogCommander is used.
-// pauseWords is the list of filler words that should be ignored when heard
-// from other actors (they are not real content and should not enter context).
-func NewMQTTListener(name, server string, commander Commander, pauseWords []string, verbose bool) (*MQTTListener, error) {
+func NewMQTTListener(name, server string, commander Commander, verbose bool) (*MQTTListener, error) {
 	if commander == nil {
 		commander = &LogCommander{}
 	}
@@ -71,19 +68,14 @@ func NewMQTTListener(name, server string, commander Commander, pauseWords []stri
 		return nil, token.Error()
 	}
 
-	pauseWordSet := make(map[string]bool, len(pauseWords))
-	for _, w := range pauseWords {
-		pauseWordSet[w] = true
-	}
 	l := &MQTTListener{
-		name:       name,
-		commander:  commander,
-		client:     client,
-		incoming:   make(chan string, 32),
-		heard:      make(chan string, 64),
-		pauseWords: pauseWordSet,
-		done:       make(chan struct{}),
-		verbose:    verbose,
+		name:      name,
+		commander: commander,
+		client:    client,
+		incoming:  make(chan string, 32),
+		heard:     make(chan string, 64),
+		done:      make(chan struct{}),
+		verbose:   verbose,
 	}
 
 	if err := subscribe(client, "direction/"+name, l.handleDirection); err != nil {
@@ -184,8 +176,9 @@ func (l *MQTTListener) handleSpeak(_ mqtt.Client, msg mqtt.Message) {
 	if s.Who == l.name {
 		return
 	}
-	// Ignore pause words — they are filler content and should not enter context.
-	if l.pauseWords[s.What] {
+	// Ignore thinking phrases — they are filler content spoken while the model
+	// is generating and should not enter other actors' conversation context.
+	if s.Thinking {
 		return
 	}
 	if l.verbose {
@@ -315,6 +308,17 @@ func (l *MQTTListener) MoreFunc() func(*[]message.Message) {
 // OutputFunc returns an outputFunc that publishes the actor's response to
 // "speak/<name>" as {"who":"<name>","what":"<content>"}.
 func (l *MQTTListener) OutputFunc() func(string) {
+	return l.makeOutputFunc(false)
+}
+
+// PauseOutputFunc returns an outputFunc that publishes pause phrases to
+// "speak/<name>" with Thinking set to true, signalling to other Actors that
+// the message is filler and should not be added to their conversation context.
+func (l *MQTTListener) PauseOutputFunc() func(string) {
+	return l.makeOutputFunc(true)
+}
+
+func (l *MQTTListener) makeOutputFunc(thinking bool) func(string) {
 	return func(content string) {
 		if len(content) == 0 {
 			return
@@ -325,7 +329,7 @@ func (l *MQTTListener) OutputFunc() func(string) {
 		if len(content) == 0 {
 			return
 		}
-		payload, err := json.Marshal(commands.Speak{Who: l.name, What: content})
+		payload, err := json.Marshal(commands.Speak{Who: l.name, What: content, Thinking: thinking})
 		if err != nil {
 			log.Printf("failed to marshal response: %v\n", err)
 			return

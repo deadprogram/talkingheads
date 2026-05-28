@@ -2,7 +2,9 @@ package actor
 
 import (
 	"context"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/hybridgroup/yzma/pkg/message"
 )
@@ -377,5 +379,86 @@ func TestCoalesceSameRole_HandlesEmptyContent(t *testing.T) {
 	}
 	if got := out[0].GetContent()["content"].(string); got != "hello" {
 		t.Errorf("empty + non-empty merge: got %q, want %q", got, "hello")
+	}
+}
+
+// --- SetPauseOutputFunc / runPauseWords ---
+
+func TestSetPauseOutputFunc_IsStored(t *testing.T) {
+	a := &Actor{}
+	fn := func(s string) {}
+	a.SetPauseOutputFunc(fn)
+	if a.pauseOutputFunc == nil {
+		t.Error("expected pauseOutputFunc to be set after SetPauseOutputFunc")
+	}
+}
+
+func TestSetPauseOutputFunc_NilClearsField(t *testing.T) {
+	a := &Actor{pauseOutputFunc: func(s string) {}}
+	a.SetPauseOutputFunc(nil)
+	if a.pauseOutputFunc != nil {
+		t.Error("expected pauseOutputFunc to be nil after SetPauseOutputFunc(nil)")
+	}
+}
+
+func TestRunPauseWords_UsesPauseOutputFunc_WhenSet(t *testing.T) {
+	var mu sync.Mutex
+	var pauseCalls, outputCalls int
+
+	a := &Actor{
+		cfg: Config{
+			PauseWords:    []string{"hmm..."},
+			PauseInterval: 60, // long interval so only the immediate first word fires
+		},
+		outputFunc:      func(s string) { mu.Lock(); outputCalls++; mu.Unlock() },
+		pauseOutputFunc: func(s string) { mu.Lock(); pauseCalls++; mu.Unlock() },
+	}
+
+	done := make(chan struct{})
+	next := a.setupPauseWords()
+	go a.runPauseWords(done, next)
+
+	// Give the goroutine time to emit the first (immediate) pause word.
+	time.Sleep(50 * time.Millisecond)
+	close(done)
+
+	mu.Lock()
+	p, o := pauseCalls, outputCalls
+	mu.Unlock()
+
+	if p == 0 {
+		t.Error("expected pauseOutputFunc to be called at least once")
+	}
+	if o != 0 {
+		t.Errorf("expected outputFunc to not be called, got %d calls", o)
+	}
+}
+
+func TestRunPauseWords_FallsBackToOutputFunc_WhenPauseOutputFuncNil(t *testing.T) {
+	var mu sync.Mutex
+	var outputCalls int
+
+	a := &Actor{
+		cfg: Config{
+			PauseWords:    []string{"hmm..."},
+			PauseInterval: 60,
+		},
+		outputFunc:      func(s string) { mu.Lock(); outputCalls++; mu.Unlock() },
+		pauseOutputFunc: nil,
+	}
+
+	done := make(chan struct{})
+	next := a.setupPauseWords()
+	go a.runPauseWords(done, next)
+
+	time.Sleep(50 * time.Millisecond)
+	close(done)
+
+	mu.Lock()
+	o := outputCalls
+	mu.Unlock()
+
+	if o == 0 {
+		t.Error("expected outputFunc to be called when pauseOutputFunc is nil")
 	}
 }

@@ -119,26 +119,21 @@ func TestHandleSpeakingStatus_OtherActorStopped(t *testing.T) {
 }
 
 // newTestListener builds a MQTTListener suitable for unit tests: no real MQTT
-// connection, buffered channels, and an optional pause-word set.
-func newTestListener(name string, pauseWords []string) *MQTTListener {
-	pw := make(map[string]bool, len(pauseWords))
-	for _, w := range pauseWords {
-		pw[w] = true
-	}
+// connection and buffered channels.
+func newTestListener(name string) *MQTTListener {
 	return &MQTTListener{
-		name:       name,
-		commander:  &mockCommander{},
-		incoming:   make(chan string, 32),
-		heard:      make(chan string, 64),
-		pauseWords: pw,
-		done:       make(chan struct{}),
+		name:      name,
+		commander: &mockCommander{},
+		incoming:  make(chan string, 32),
+		heard:     make(chan string, 64),
+		done:      make(chan struct{}),
 	}
 }
 
 // --- handleSpeak ---
 
 func TestHandleSpeak_IgnoresSelf(t *testing.T) {
-	l := newTestListener("gemmai", nil)
+	l := newTestListener("gemmai")
 
 	payload, _ := json.Marshal(commands.Speak{Who: "gemmai", What: "hello"})
 	l.handleSpeak(nil, &mockMessage{payload: payload})
@@ -151,20 +146,20 @@ func TestHandleSpeak_IgnoresSelf(t *testing.T) {
 }
 
 func TestHandleSpeak_IgnoresPauseWord(t *testing.T) {
-	l := newTestListener("gemmai", []string{"let me think...", "one moment..."})
+	l := newTestListener("gemmai")
 
-	payload, _ := json.Marshal(commands.Speak{Who: "phineas", What: "let me think..."})
+	payload, _ := json.Marshal(commands.Speak{Who: "phineas", What: "let me think...", Thinking: true})
 	l.handleSpeak(nil, &mockMessage{payload: payload})
 
 	select {
 	case got := <-l.heard:
-		t.Errorf("expected pause word to be filtered, got %q", got)
+		t.Errorf("expected thinking phrase to be filtered, got %q", got)
 	default:
 	}
 }
 
 func TestHandleSpeak_RealSpeech_EnqueuedToHeard(t *testing.T) {
-	l := newTestListener("gemmai", []string{"let me think..."})
+	l := newTestListener("gemmai")
 
 	payload, _ := json.Marshal(commands.Speak{Who: "phineas", What: "The sky is blue."})
 	l.handleSpeak(nil, &mockMessage{payload: payload})
@@ -181,7 +176,7 @@ func TestHandleSpeak_RealSpeech_EnqueuedToHeard(t *testing.T) {
 }
 
 func TestHandleSpeak_RealSpeech_NotInIncoming(t *testing.T) {
-	l := newTestListener("gemmai", nil)
+	l := newTestListener("gemmai")
 
 	payload, _ := json.Marshal(commands.Speak{Who: "phineas", What: "hello there"})
 	l.handleSpeak(nil, &mockMessage{payload: payload})
@@ -194,7 +189,7 @@ func TestHandleSpeak_RealSpeech_NotInIncoming(t *testing.T) {
 }
 
 func TestHandleSpeak_InvalidPayload(t *testing.T) {
-	l := newTestListener("gemmai", nil)
+	l := newTestListener("gemmai")
 
 	l.handleSpeak(nil, &mockMessage{payload: []byte("not json")})
 
@@ -205,10 +200,27 @@ func TestHandleSpeak_InvalidPayload(t *testing.T) {
 	}
 }
 
+func TestHandleSpeak_ThinkingFalseExplicit_PassesThrough(t *testing.T) {
+	l := newTestListener("gemmai")
+
+	payload, _ := json.Marshal(commands.Speak{Who: "phineas", What: "I am ready.", Thinking: false})
+	l.handleSpeak(nil, &mockMessage{payload: payload})
+
+	select {
+	case got := <-l.heard:
+		want := "phineas says: I am ready."
+		if got != want {
+			t.Errorf("heard: got %q, want %q", got, want)
+		}
+	case <-time.After(time.Second):
+		t.Error("timed out waiting for heard message")
+	}
+}
+
 // --- drainHeard ---
 
 func TestDrainHeard_Empty(t *testing.T) {
-	l := newTestListener("gemmai", nil)
+	l := newTestListener("gemmai")
 	conv := []message.Message{}
 	l.drainHeard(&conv)
 	if len(conv) != 0 {
@@ -217,7 +229,7 @@ func TestDrainHeard_Empty(t *testing.T) {
 }
 
 func TestDrainHeard_MultipleMessages(t *testing.T) {
-	l := newTestListener("gemmai", nil)
+	l := newTestListener("gemmai")
 	l.heard <- "phineas says: Hello."
 	l.heard <- "phineas says: How are you?"
 
@@ -241,7 +253,7 @@ func TestDrainHeard_MultipleMessages(t *testing.T) {
 // --- MoreFunc ---
 
 func TestMoreFunc_BlocksOnDirectionNotOnHeard(t *testing.T) {
-	l := newTestListener("gemmai", nil)
+	l := newTestListener("gemmai")
 
 	// Put speech in heard — MoreFunc must not unblock on this alone.
 	l.heard <- "phineas says: Something."
@@ -273,7 +285,7 @@ func TestMoreFunc_BlocksOnDirectionNotOnHeard(t *testing.T) {
 }
 
 func TestMoreFunc_HeardSpeechPrecedesDirection(t *testing.T) {
-	l := newTestListener("gemmai", nil)
+	l := newTestListener("gemmai")
 	l.heard <- "phineas says: The answer is 42."
 
 	moreFn := l.MoreFunc()
@@ -297,7 +309,7 @@ func TestMoreFunc_HeardSpeechPrecedesDirection(t *testing.T) {
 }
 
 func TestMoreFunc_HeardArrivingDuringWaitIsIncluded(t *testing.T) {
-	l := newTestListener("gemmai", nil)
+	l := newTestListener("gemmai")
 
 	moreFn := l.MoreFunc()
 	conv := []message.Message{}
@@ -342,7 +354,7 @@ func TestMoreFunc_HeardArrivingDuringWaitIsIncluded(t *testing.T) {
 // --- SetPreprocessCallback / preprocessing MoreFunc ---
 
 func TestSetPreprocessCallback_NilIsAccepted(t *testing.T) {
-	l := newTestListener("gemmai", nil)
+	l := newTestListener("gemmai")
 	l.SetPreprocessCallback(nil)
 	if l.preprocessCB != nil {
 		t.Error("expected preprocessCB to be nil after SetPreprocessCallback(nil)")
@@ -350,7 +362,7 @@ func TestSetPreprocessCallback_NilIsAccepted(t *testing.T) {
 }
 
 func TestSetPreprocessCallback_Stored(t *testing.T) {
-	l := newTestListener("gemmai", nil)
+	l := newTestListener("gemmai")
 	called := false
 	cb := func(_ *[]message.Message) { called = true }
 	l.SetPreprocessCallback(cb)
@@ -365,7 +377,7 @@ func TestSetPreprocessCallback_Stored(t *testing.T) {
 }
 
 func TestMoreFunc_WithPreprocessCB_CallsCallbackOnHeard(t *testing.T) {
-	l := newTestListener("gemmai", nil)
+	l := newTestListener("gemmai")
 
 	var mu sync.Mutex
 	var callCount int
@@ -404,7 +416,7 @@ func TestMoreFunc_WithPreprocessCB_CallsCallbackOnHeard(t *testing.T) {
 }
 
 func TestMoreFunc_WithPreprocessCB_HeardBeforeDirection(t *testing.T) {
-	l := newTestListener("gemmai", nil)
+	l := newTestListener("gemmai")
 	l.SetPreprocessCallback(func(_ *[]message.Message) {})
 
 	l.heard <- "phineas says: The answer is 42."
@@ -428,7 +440,7 @@ func TestMoreFunc_WithPreprocessCB_HeardBeforeDirection(t *testing.T) {
 }
 
 func TestMoreFunc_WithPreprocessCB_BlocksUntilDirection(t *testing.T) {
-	l := newTestListener("gemmai", nil)
+	l := newTestListener("gemmai")
 	l.SetPreprocessCallback(func(_ *[]message.Message) {})
 
 	moreFn := l.MoreFunc()
@@ -458,7 +470,7 @@ func TestMoreFunc_WithPreprocessCB_BlocksUntilDirection(t *testing.T) {
 }
 
 func TestMoreFunc_WithPreprocessCB_ClosedDone(t *testing.T) {
-	l := newTestListener("gemmai", nil)
+	l := newTestListener("gemmai")
 	l.SetPreprocessCallback(func(_ *[]message.Message) {})
 	moreFn := l.MoreFunc()
 
@@ -478,10 +490,10 @@ func TestMoreFunc_WithPreprocessCB_ClosedDone(t *testing.T) {
 }
 
 func TestMoreFunc_PauseWordsNotAddedToConversation(t *testing.T) {
-	l := newTestListener("gemmai", []string{"let me think...", "one moment..."})
+	l := newTestListener("gemmai")
 
-	// These go through handleSpeak which filters them; simulate that filter
-	// path by putting only real speech into heard (as handleSpeak would).
+	// Thinking phrases are filtered in handleSpeak before reaching heard;
+	// simulate that by putting only real speech directly into heard.
 	l.heard <- "phineas says: real sentence"
 
 	moreFn := l.MoreFunc()

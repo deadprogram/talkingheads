@@ -41,6 +41,7 @@ type Actor struct {
 
 	moreConversationFunc func(conversation *[]message.Message)
 	outputFunc           func(content string)
+	pauseOutputFunc      func(content string)
 	tools                map[string]Tool
 	toolsJSON            string
 }
@@ -574,6 +575,14 @@ func (a *Actor) handleToolCalls(ctx context.Context, conversation *[]message.Mes
 	return consecutiveToolOnlyTurns, false
 }
 
+// SetPauseOutputFunc sets an alternate output function used when emitting
+// pause phrases. When set, pause phrases are published via this function
+// instead of the regular outputFunc, allowing them to be flagged with
+// Thinking=true so other Actors can ignore them.
+func (a *Actor) SetPauseOutputFunc(f func(content string)) {
+	a.pauseOutputFunc = f
+}
+
 // setupPauseWords builds a shuffled deck of pause words and returns a function
 // that yields the next word, reshuffling when the deck is exhausted. A mutex
 // guards the deck so the goroutine from the previous turn may still be exiting
@@ -599,9 +608,14 @@ func (a *Actor) setupPauseWords() func() string {
 	}
 }
 
-// runPauseWords emits pause words via outputFunc until done is closed.
-// It is run in a goroutine and should be stopped by closing done.
+// runPauseWords emits pause words via outputFunc (or pauseOutputFunc when set)
+// until done is closed. It is run in a goroutine and should be stopped by
+// closing done.
 func (a *Actor) runPauseWords(done <-chan struct{}, next func() string) {
+	emit := a.outputFunc
+	if a.pauseOutputFunc != nil {
+		emit = a.pauseOutputFunc
+	}
 	maxInterval := a.cfg.PauseInterval
 	if maxInterval <= 0 {
 		maxInterval = DefaultPauseInterval
@@ -614,14 +628,14 @@ func (a *Actor) runPauseWords(done <-chan struct{}, next func() string) {
 	case <-done:
 		return
 	default:
-		a.outputFunc(next())
+		emit(next())
 	}
 
 	for {
 		jitter := time.Duration(halfMs+rand.Int63n(halfMs+1)) * time.Millisecond
 		select {
 		case <-time.After(jitter):
-			a.outputFunc(next())
+			emit(next())
 		case <-done:
 			return
 		}
