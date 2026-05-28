@@ -22,6 +22,8 @@ One of `--model-url` or `--model-path` is required.
 | `--serial` | | | Serial port for sending action commands to the microcontroller (e.g. `/dev/ttyACM0`) |
 | `--baud` | | `9600` | Baud rate for the serial port |
 | `--theme` | | | Personality color sent to the action firmware on startup (`red`, `green`, `blue`, `purple`, `orange`, `yellow`) |
+| `--pause-words-file` | `-pw` | | Path to a file of pause phrases, one per line; overrides the built-in defaults |
+| `--pause-interval` | | `5` | Seconds between repeated pause phrases while waiting for the model's first token |
 
 ### Sampling flags
 
@@ -36,6 +38,21 @@ One of `--model-url` or `--model-path` is required.
 | `--presence-penalty` | `0.0` | Penalise tokens by presence (`0.0` disables) |
 | `--dry-multiplier` | `0.0` | DRY repetition penalty multiplier (`0.0` disables) |
 | `--max-sentences` | `0` | Cap the number of sentences spoken per turn (`0` = unlimited) |
+
+## Pause phrases
+
+While the model is generating a response, the actor immediately speaks a randomly chosen *pause phrase* (e.g. `"let me think about that for a moment..."`) to mask the inference startup latency. Additional phrases are emitted at roughly `--pause-interval` second intervals until the first token arrives.
+
+The `--pause-words-file` flag loads phrases from a plain-text file — one phrase per line. Blank lines and lines beginning with `#` are ignored:
+
+```text
+# Llama3000 pause phrases
+processing your query across 47 dimensions...
+give me a nanosecond to consult my memory banks...
+calculating the most optimal response...
+```
+
+When the flag is omitted the built-in default phrase list is used. Pause phrases are published with `thinking: true` in the MQTT payload so other actors automatically ignore them.
 
 ## System prompts
 
