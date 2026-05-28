@@ -87,7 +87,7 @@ func action() {
 			waitCounter--
 			if waitCounter <= 0 {
 				waitCounter = randomInt(8, 12)
-				jitter := randomInt(-10, 11)
+				jitter := randomInt(-30, 31)
 				svo.SetAngle(angle + jitter)
 			}
 
@@ -96,7 +96,7 @@ func action() {
 			speakCounter--
 			if speakCounter <= 0 {
 				speakCounter = randomInt(2, 3)
-				jitter := randomInt(-75, 76)
+				jitter := randomInt(-125, 126)
 				svo.SetAngle(angle + jitter)
 			}
 

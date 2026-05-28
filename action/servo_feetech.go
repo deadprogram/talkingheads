@@ -59,6 +59,6 @@ func calcAngle(angle int) int {
 		angle = 180
 	}
 
-	// keep to the middle 512 values of the midpoint.
-	return 1792 + angle*512/180
+	// keep to the middle 768 values of the midpoint.
+	return 1792 + angle*768/180
 }
