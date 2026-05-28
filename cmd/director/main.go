@@ -72,6 +72,10 @@ func RunCLI(version string) error {
 				Usage: "maximum Levenshtein distance ratio (0–1) for fuzzy actor name matching; lower values require a closer match",
 				Value: 0.6,
 			},
+			&cli.StringFlag{
+				Name:  "hotmic-device",
+				Usage: "case-insensitive substring of the PortAudio input device name to use (e.g. \"USB\", \"Yeti\"); uses system default when not set",
+			},
 			&cli.StringSliceFlag{
 				Name:  "hotmic-actor-alias",
 				Usage: "map alternate spoken names to a canonical actor: --hotmic-actor-alias gemmai:jami|jamai|jenna (repeatable)",
@@ -114,8 +118,9 @@ func RunCLI(version string) error {
 			var mic *hotmic.HotMic
 			if modelPath := c.String("hotmic-model"); modelPath != "" {
 				mic, err = hotmic.New(hotmic.Options{
-					ModelPath: modelPath,
-					Language:  c.String("hotmic-lang"),
+					ModelPath:  modelPath,
+					Language:   c.String("hotmic-lang"),
+					DeviceName: c.String("hotmic-device"),
 				})
 				if err != nil {
 					return fmt.Errorf("hotmic init: %w", err)

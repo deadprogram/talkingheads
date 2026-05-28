@@ -33,9 +33,10 @@ const (
 // HotMic captures audio from the default microphone when a toggle key is
 // pressed, then transcribes it using a local whisper.cpp model.
 type HotMic struct {
-	key      rune
-	language string
-	ctx      whisper.Context
+	key        rune
+	language   string
+	deviceName string
+	ctx        whisper.Context
 
 	// recording state (protected by mu)
 	mu        sync.Mutex
@@ -58,6 +59,11 @@ type Options struct {
 	// Language is the BCP-47 language code to use for transcription, or "auto"
 	// for automatic language detection. Defaults to "auto".
 	Language string
+
+	// DeviceName is a case-insensitive substring of the PortAudio input device
+	// name to use for capture (e.g. "USB", "Yeti"). When empty the system
+	// default input device is used.
+	DeviceName string
 }
 
 // New loads the whisper model at opts.ModelPath and returns a HotMic ready for
@@ -84,9 +90,10 @@ func New(opts Options) (*HotMic, error) {
 	}
 
 	return &HotMic{
-		key:      opts.Key,
-		language: opts.Language,
-		ctx:      ctx,
+		key:        opts.Key,
+		language:   opts.Language,
+		deviceName: opts.DeviceName,
+		ctx:        ctx,
 	}, nil
 }
 
@@ -120,6 +127,7 @@ func (h *HotMic) StartCapture() error {
 
 	stop := h.stopRec
 	samples := h.samplesCh
+	deviceName := h.deviceName
 
 	go func() {
 		// Pin this goroutine to its OS thread so that portaudio.Initialize,
@@ -134,7 +142,7 @@ func (h *HotMic) StartCapture() error {
 		}
 		ready <- nil
 
-		captureAudio(stop, samples)
+		captureAudio(stop, samples, deviceName)
 
 		if err := portaudio.Terminate(); err != nil {
 			log.Printf("hotmic: portaudio terminate: %v", err)
@@ -256,7 +264,7 @@ func (h *HotMic) Listen(ctx context.Context) (<-chan string, error) {
 					if !recording {
 						stopRecCh = make(chan struct{})
 						collectedCh = make(chan []float32, 1)
-						go captureAudio(stopRecCh, collectedCh)
+						go captureAudio(stopRecCh, collectedCh, h.deviceName)
 						recording = true
 						log.Println("hotmic: recording...")
 					} else {
@@ -290,12 +298,51 @@ func (h *HotMic) Listen(ctx context.Context) (<-chan string, error) {
 	return out, nil
 }
 
-// captureAudio records mono float32 audio from the default input device at
-// whisper's required sample rate until stop is closed, then sends all
-// collected samples on out.
-func captureAudio(stop <-chan struct{}, out chan<- []float32) {
+// findInputDevice returns the first PortAudio input device whose name
+// contains deviceName (case-insensitive). Must be called while PortAudio is
+// initialised.
+func findInputDevice(deviceName string) (*portaudio.DeviceInfo, error) {
+	devices, err := portaudio.Devices()
+	if err != nil {
+		return nil, fmt.Errorf("enumerate devices: %w", err)
+	}
+	nameLower := strings.ToLower(deviceName)
+	for _, d := range devices {
+		if d.MaxInputChannels > 0 && strings.Contains(strings.ToLower(d.Name), nameLower) {
+			return d, nil
+		}
+	}
+	return nil, fmt.Errorf("no input device found matching %q", deviceName)
+}
+
+// captureAudio records mono float32 audio from the given input device (or the
+// system default when deviceName is empty) at whisper's required sample rate
+// until stop is closed, then sends all collected samples on out.
+func captureAudio(stop <-chan struct{}, out chan<- []float32, deviceName string) {
 	buf := make([]float32, framesPerBuf)
-	stream, err := portaudio.OpenDefaultStream(numChannels, 0, float64(whisper.SampleRate), framesPerBuf, buf)
+
+	var stream *portaudio.Stream
+	var err error
+	if deviceName != "" {
+		dev, devErr := findInputDevice(deviceName)
+		if devErr != nil {
+			log.Printf("hotmic: %v", devErr)
+			out <- nil
+			return
+		}
+		p := portaudio.StreamParameters{
+			Input: portaudio.StreamDeviceParameters{
+				Device:   dev,
+				Channels: numChannels,
+				Latency:  dev.DefaultLowInputLatency,
+			},
+			SampleRate:      float64(whisper.SampleRate),
+			FramesPerBuffer: framesPerBuf,
+		}
+		stream, err = portaudio.OpenStream(p, buf)
+	} else {
+		stream, err = portaudio.OpenDefaultStream(numChannels, 0, float64(whisper.SampleRate), framesPerBuf, buf)
+	}
 	if err != nil {
 		log.Printf("hotmic: open stream: %v", err)
 		out <- nil
