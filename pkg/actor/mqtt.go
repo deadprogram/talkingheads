@@ -18,16 +18,18 @@ import (
 // The published response payload is {"who":"<name>","what":"<content>"},
 // which is compatible with the speak/# subscription in pkg/dialogue.
 type MQTTListener struct {
-	name         string
-	commander    Commander
-	client       mqtt.Client
-	incoming     chan string
-	heard        chan string
-	done         chan struct{}
-	closeOnce    sync.Once
-	verbose      bool
-	preprocessCB func(*[]message.Message)
-	eventsCh     chan<- string
+	name          string
+	commander     Commander
+	client        mqtt.Client
+	incoming      chan string
+	heard         chan string
+	done          chan struct{}
+	closeOnce     sync.Once
+	verbose       bool
+	preprocessCB  func(*[]message.Message)
+	eventsCh      chan<- string
+	lastSpeaker   string
+	lastSpeakerMu sync.RWMutex
 }
 
 // SetEventsCh registers a channel that receives human-readable event strings
@@ -121,8 +123,23 @@ func (l *MQTTListener) handleDirection(_ mqtt.Client, msg mqtt.Message) {
 	if l.verbose {
 		log.Printf("Received direction message from Director: %s\n", a.What)
 	}
-	l.emit(fmt.Sprintf("Director: %q", a.What))
-	l.enqueue(a.What)
+
+	text := a.What
+	if a.Respond {
+		l.lastSpeakerMu.RLock()
+		lastSpeaker := l.lastSpeaker
+		l.lastSpeakerMu.RUnlock()
+		if lastSpeaker != "" {
+			if text == "" {
+				text = "Now respond directly to " + lastSpeaker + "."
+			} else {
+				text = text + " Respond directly to " + lastSpeaker + "."
+			}
+		}
+	}
+
+	l.emit(fmt.Sprintf("Director: %q", text))
+	l.enqueue(text)
 }
 
 func (l *MQTTListener) handleSpeakingStatus(_ mqtt.Client, msg mqtt.Message) {
@@ -181,6 +198,9 @@ func (l *MQTTListener) handleSpeak(_ mqtt.Client, msg mqtt.Message) {
 	if s.Thinking {
 		return
 	}
+	l.lastSpeakerMu.Lock()
+	l.lastSpeaker = s.Who
+	l.lastSpeakerMu.Unlock()
 	if l.verbose {
 		log.Printf("Heard %s say: %s\n", s.Who, s.What)
 	}

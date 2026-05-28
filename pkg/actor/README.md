@@ -76,11 +76,29 @@ All payloads use the JSON types from `pkg/commands`.
 Actors do **not** subscribe to `say/#`. Messages published there are spoken by
 Dialogue but are deliberately invisible to every Actor's conversation history.
 
+### Directing an Actor to speak
+
+The Director publishes a `Direction` payload to `direction/<name>` to prompt the Actor for a response.
+
+| Field | Type | Description |
+|---|---|---|
+| `who` | string | Name of the Actor being directed |
+| `what` | string | The prompt or guidance text (may be empty) |
+| `respond` | bool | `true` to instruct the Actor to respond to the last Actor it heard speak; omitted (false) for a normal direction |
+
+When `respond` is `true` the Actor builds the direction text automatically:
+
+- If a previous speaker is known and `what` is empty → `"Now respond directly to <lastSpeaker>."`
+- If a previous speaker is known and `what` is non-empty → `"<what> Respond directly to <lastSpeaker>."`
+- If no speaker has been heard yet → `what` is used as-is.
+
+The Actor tracks the last non-thinking speaker internally, updated each time a `speak/#` message with `thinking: false` arrives.
+
 ### Heard speech from other Actors
 
 When another Actor publishes a sentence to `speak/<other>`, this Actor receives it via the `speak/#` subscription and adds it to the conversation as context. The heard speech is buffered and injected into the conversation immediately before the next Direction is processed — the Actor never responds to heard speech on its own.
 
-Pause phrases (filler sentences spoken while the model is generating, such as `"let me think..."`) are published with `"thinking": true` in the JSON payload. Receiving Actors check this field and discard those messages — they are never added to the conversation context.
+Pause phrases (filler sentences spoken while the model is generating, such as `"let me think..."`) are published with `"thinking": true` in the JSON payload. Receiving Actors check this field and discard those messages — they are never added to the conversation context. Thinking messages also do **not** update the last-speaker record.
 
 ### `speak` payload fields
 

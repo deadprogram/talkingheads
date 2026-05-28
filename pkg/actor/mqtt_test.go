@@ -508,3 +508,120 @@ func TestMoreFunc_PauseWordsNotAddedToConversation(t *testing.T) {
 		}
 	}
 }
+
+// --- lastSpeaker tracking ---
+
+func TestHandleSpeak_TracksLastSpeaker(t *testing.T) {
+	l := newTestListener("gemmai")
+
+	payload, _ := json.Marshal(commands.Speak{Who: "phineas", What: "hello"})
+	l.handleSpeak(nil, &mockMessage{payload: payload})
+
+	l.lastSpeakerMu.RLock()
+	got := l.lastSpeaker
+	l.lastSpeakerMu.RUnlock()
+
+	if got != "phineas" {
+		t.Errorf("lastSpeaker: got %q, want \"phineas\"", got)
+	}
+}
+
+func TestHandleSpeak_ThinkingDoesNotUpdateLastSpeaker(t *testing.T) {
+	l := newTestListener("gemmai")
+
+	// seed a known lastSpeaker
+	l.lastSpeakerMu.Lock()
+	l.lastSpeaker = "phineas"
+	l.lastSpeakerMu.Unlock()
+
+	payload, _ := json.Marshal(commands.Speak{Who: "qwentin", What: "let me think...", Thinking: true})
+	l.handleSpeak(nil, &mockMessage{payload: payload})
+
+	l.lastSpeakerMu.RLock()
+	got := l.lastSpeaker
+	l.lastSpeakerMu.RUnlock()
+
+	if got != "phineas" {
+		t.Errorf("lastSpeaker must not change for thinking=true; got %q", got)
+	}
+}
+
+// --- handleDirection with Respond=true ---
+
+func TestHandleDirection_Respond_WithKnownLastSpeaker_EmptyWhat(t *testing.T) {
+	l := newTestListener("gemmai")
+	l.lastSpeakerMu.Lock()
+	l.lastSpeaker = "phineas"
+	l.lastSpeakerMu.Unlock()
+
+	payload, _ := json.Marshal(commands.Direction{Who: "gemmai", What: "", Respond: true})
+	l.handleDirection(nil, &mockMessage{payload: payload})
+
+	select {
+	case got := <-l.incoming:
+		want := "Now respond directly to phineas."
+		if got != want {
+			t.Errorf("incoming: got %q, want %q", got, want)
+		}
+	case <-time.After(time.Second):
+		t.Error("timed out waiting for incoming message")
+	}
+}
+
+func TestHandleDirection_Respond_WithKnownLastSpeaker_NonEmptyWhat(t *testing.T) {
+	l := newTestListener("gemmai")
+	l.lastSpeakerMu.Lock()
+	l.lastSpeaker = "phineas"
+	l.lastSpeakerMu.Unlock()
+
+	payload, _ := json.Marshal(commands.Direction{Who: "gemmai", What: "Keep it brief.", Respond: true})
+	l.handleDirection(nil, &mockMessage{payload: payload})
+
+	select {
+	case got := <-l.incoming:
+		want := "Keep it brief. Respond directly to phineas."
+		if got != want {
+			t.Errorf("incoming: got %q, want %q", got, want)
+		}
+	case <-time.After(time.Second):
+		t.Error("timed out waiting for incoming message")
+	}
+}
+
+func TestHandleDirection_Respond_UnknownLastSpeaker_FallsBackToWhat(t *testing.T) {
+	l := newTestListener("gemmai")
+	// lastSpeaker is "" (default)
+
+	payload, _ := json.Marshal(commands.Direction{Who: "gemmai", What: "Say something.", Respond: true})
+	l.handleDirection(nil, &mockMessage{payload: payload})
+
+	select {
+	case got := <-l.incoming:
+		want := "Say something."
+		if got != want {
+			t.Errorf("incoming: got %q, want %q", got, want)
+		}
+	case <-time.After(time.Second):
+		t.Error("timed out waiting for incoming message")
+	}
+}
+
+func TestHandleDirection_NoRespond_IgnoresLastSpeaker(t *testing.T) {
+	l := newTestListener("gemmai")
+	l.lastSpeakerMu.Lock()
+	l.lastSpeaker = "phineas"
+	l.lastSpeakerMu.Unlock()
+
+	payload, _ := json.Marshal(commands.Direction{Who: "gemmai", What: "Tell us a joke."})
+	l.handleDirection(nil, &mockMessage{payload: payload})
+
+	select {
+	case got := <-l.incoming:
+		want := "Tell us a joke."
+		if got != want {
+			t.Errorf("incoming: got %q, want %q", got, want)
+		}
+	case <-time.After(time.Second):
+		t.Error("timed out waiting for incoming message")
+	}
+}

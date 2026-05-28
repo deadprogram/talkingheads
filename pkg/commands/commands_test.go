@@ -53,3 +53,51 @@ func TestSpeak_Thinking_FalseWhenAbsentInJSON(t *testing.T) {
 		t.Errorf("expected Thinking to be false when absent in JSON, got true")
 	}
 }
+
+func TestDirection_Respond_OmittedWhenFalse(t *testing.T) {
+	d := Direction{Who: "gemmai", What: "tell us about yourself"}
+	b, err := json.Marshal(d)
+	if err != nil {
+		t.Fatalf("json.Marshal: %v", err)
+	}
+	if strings.Contains(string(b), "respond") {
+		t.Errorf("expected 'respond' to be omitted when false, got %s", b)
+	}
+}
+
+func TestDirection_Respond_IncludedWhenTrue(t *testing.T) {
+	d := Direction{Who: "gemmai", What: "", Respond: true}
+	b, err := json.Marshal(d)
+	if err != nil {
+		t.Fatalf("json.Marshal: %v", err)
+	}
+	if !strings.Contains(string(b), `"respond":true`) {
+		t.Errorf("expected 'respond':true in JSON, got %s", b)
+	}
+}
+
+func TestDirection_Respond_RoundTrip(t *testing.T) {
+	original := Direction{Who: "phineas", What: "keep it brief", Respond: true}
+	b, err := json.Marshal(original)
+	if err != nil {
+		t.Fatalf("json.Marshal: %v", err)
+	}
+	var decoded Direction
+	if err := json.Unmarshal(b, &decoded); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+	if decoded.Who != original.Who || decoded.What != original.What || decoded.Respond != original.Respond {
+		t.Errorf("round-trip mismatch: got %+v, want %+v", decoded, original)
+	}
+}
+
+func TestDirection_Respond_FalseWhenAbsentInJSON(t *testing.T) {
+	b := []byte(`{"who":"gemmai","what":"hello"}`)
+	var d Direction
+	if err := json.Unmarshal(b, &d); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+	if d.Respond {
+		t.Errorf("expected Respond to be false when absent in JSON, got true")
+	}
+}
