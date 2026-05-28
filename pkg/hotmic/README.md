@@ -29,25 +29,20 @@ sudo dnf install portaudio-devel
 brew install portaudio
 ```
 
-### 2. libwhisper shared library
-
-Bucky loads `libwhisper.so` at runtime via `dlopen`. You need a pre-built shared library; no CGo or static library is required.
-
-Build with CPU-only support:
+### 2. Install Bucky
 
 ```sh
-git clone https://github.com/ggml-org/whisper.cpp
-cd whisper.cpp
-cmake -B build -DBUILD_SHARED_LIBS=ON -DGGML_OPENMP=OFF -DWHISPER_BUILD_TESTS=OFF -DWHISPER_BUILD_EXAMPLES=OFF
-cmake --build build --config Release -j$(nproc)
-# Copy the resulting shared library to a stable location, e.g. ~/Development/bucky/lib/
-cp build/src/libwhisper.so ~/Development/bucky/lib/
+go install github.com/ardanlabs/bucky@latest
+```
+
+```sh
+bucky install -lib ./lib
 ```
 
 At runtime, point `BUCKY_LIB` at the directory containing `libwhisper.so`:
 
 ```sh
-export BUCKY_LIB=~/Development/bucky/lib
+export BUCKY_LIB=$(pwd)/lib
 ```
 
 ### 3. A whisper model file
@@ -55,10 +50,7 @@ export BUCKY_LIB=~/Development/bucky/lib
 Download any GGML-format model, for example:
 
 ```sh
-# Using the whisper.cpp helper script:
-bash whisper.cpp/models/download-ggml-model.sh base.en
-# Or download directly from Hugging Face:
-wget https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin
+bucky model get tiny
 ```
 
 ## Building
