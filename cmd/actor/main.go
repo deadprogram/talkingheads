@@ -248,6 +248,7 @@ func run(c *cli.Context) error {
 
 	var moreFunc func(*[]message.Message)
 	var outputFunc func(string)
+	var pauseOutputFunc func(string)
 	var ml *actor.MQTTListener
 
 	cfg := actor.DefaultConfig()
@@ -276,7 +277,7 @@ func run(c *cli.Context) error {
 
 	if server != "" {
 		var err error
-		ml, err = actor.NewMQTTListener(name, server, commander, cfg.PauseWords, verbose)
+		ml, err = actor.NewMQTTListener(name, server, commander, verbose)
 		if err != nil {
 			return cli.Exit(fmt.Sprintf("failed to connect to MQTT broker: %v", err), 1)
 		}
@@ -289,6 +290,8 @@ func run(c *cli.Context) error {
 		ml.SetEventsCh(eventsCh)
 		moreFunc = ml.MoreFunc()
 		baseOutput := ml.OutputFunc()
+		basePauseOutput := ml.PauseOutputFunc()
+		pauseOutputFunc = basePauseOutput
 		outputFunc = func(content string) {
 			eventsCh <- content
 			baseOutput(content)
@@ -325,6 +328,7 @@ func run(c *cli.Context) error {
 
 	if ml != nil {
 		ml.SetPreprocessCallback(a.PreprocessFunc(ctx))
+		a.SetPauseOutputFunc(pauseOutputFunc)
 	}
 
 	// Redirect log output: into the viewport when verbose, silenced otherwise.

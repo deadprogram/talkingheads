@@ -9,9 +9,13 @@ type Direction struct {
 
 // Speak is the payload for the speak/# MQTT topic.
 // It represents a message spoken by an Actor.
+// Thinking is true when the Actor is using a pause phrase while waiting for
+// the model to produce its first token; other Actors should ignore such
+// messages and not add them to their conversation context.
 type Speak struct {
-	Who  string `json:"who"`
-	What string `json:"what"`
+	Who      string `json:"who"`
+	What     string `json:"what"`
+	Thinking bool   `json:"thinking,omitempty"`
 }
 
 // Say is the payload for the say/# MQTT topic.
