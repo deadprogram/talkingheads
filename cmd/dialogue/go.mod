@@ -45,7 +45,7 @@ require (
 	github.com/googleapis/enterprise-certificate-proxy v0.3.15 // indirect
 	github.com/googleapis/gax-go/v2 v2.22.0 // indirect
 	github.com/gorilla/websocket v1.5.3 // indirect
-	github.com/hybridgroup/go-sayanything v0.0.0-20260504182014-9633f2a84d04 // indirect
+	github.com/talkingheads2053/sayanything v0.0.0-20260504182014-9633f2a84d04 // indirect
 	github.com/lucasb-eyer/go-colorful v1.3.0 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mattn/go-localereader v0.0.1 // indirect

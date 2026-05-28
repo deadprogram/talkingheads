@@ -1,6 +1,6 @@
 # dialogue
 
-Text-to-speech service that listens for MQTT messages and speaks them with the [sayanything](https://github.com/hybridgroup/go-sayanything) package using the [Piper](https://github.com/rhasspy/piper) Text To Speech engine to create audio output for everything said by Actors.
+Text-to-speech service that listens for MQTT messages and speaks them with the [sayanything](https://github.com/talkingheads2053/sayanything) package using the [Piper](https://github.com/rhasspy/piper) Text To Speech engine to create audio output for everything said by Actors.
 
 ## Commands
 
