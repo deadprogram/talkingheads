@@ -1,11 +1,11 @@
-module github.com/deadprogram/talkingheads/cmd/dialogue
+module github.com/talkingheads2053/talkingheads/cmd/dialogue
 
 go 1.26.0
 
-replace github.com/deadprogram/talkingheads => ../..
+replace github.com/talkingheads2053/talkingheads => ../..
 
 require (
-	github.com/deadprogram/talkingheads v0.0.0
+	github.com/talkingheads2053/talkingheads v0.0.0
 	github.com/urfave/cli/v2 v2.25.1
 )
 

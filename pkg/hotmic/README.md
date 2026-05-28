@@ -78,7 +78,7 @@ go build ./...
 ## Usage
 
 ```go
-import "github.com/deadprogram/talkingheads/pkg/hotmic"
+import "github.com/talkingheads2053/talkingheads/pkg/hotmic"
 
 mic, err := hotmic.New(hotmic.Options{
     Key:       ' ',                    // space toggles record on/off

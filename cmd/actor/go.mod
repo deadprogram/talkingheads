@@ -1,14 +1,14 @@
-module github.com/deadprogram/talkingheads/cmd/actor
+module github.com/talkingheads2053/talkingheads/cmd/actor
 
 go 1.26.0
 
-replace github.com/deadprogram/talkingheads => ../..
+replace github.com/talkingheads2053/talkingheads => ../..
 
 require (
 	github.com/charmbracelet/bubbles v1.0.0
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/lipgloss v1.1.0
-	github.com/deadprogram/talkingheads v0.0.0-00010101000000-000000000000
+	github.com/talkingheads2053/talkingheads v0.0.0-00010101000000-000000000000
 	github.com/hybridgroup/yzma v1.14.0
 	github.com/urfave/cli/v2 v2.27.7
 )

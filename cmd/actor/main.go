@@ -12,9 +12,9 @@ import (
 	"syscall"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/deadprogram/talkingheads/pkg/actor"
 	"github.com/hybridgroup/yzma/pkg/download"
 	"github.com/hybridgroup/yzma/pkg/message"
+	"github.com/talkingheads2053/talkingheads/pkg/actor"
 	"github.com/urfave/cli/v2"
 )
 

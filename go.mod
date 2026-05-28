@@ -1,4 +1,4 @@
-module github.com/deadprogram/talkingheads
+module github.com/talkingheads2053/talkingheads
 
 go 1.26.0
 

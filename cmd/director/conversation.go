@@ -5,8 +5,8 @@ import (
 	"log"
 	"strings"
 
-	"github.com/deadprogram/talkingheads/pkg/commands"
 	mqtt "github.com/eclipse/paho.mqtt.golang"
+	"github.com/talkingheads2053/talkingheads/pkg/commands"
 )
 
 // questionKind selects which MQTT topic and payload type a question is sent as.

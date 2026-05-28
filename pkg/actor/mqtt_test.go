@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/deadprogram/talkingheads/pkg/commands"
 	"github.com/hybridgroup/yzma/pkg/message"
+	"github.com/talkingheads2053/talkingheads/pkg/commands"
 )
 
 // mockCommander records the last command sent.

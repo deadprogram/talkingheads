@@ -8,7 +8,7 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/deadprogram/talkingheads/pkg/hotmic"
+	"github.com/talkingheads2053/talkingheads/pkg/hotmic"
 )
 
 // ── styles ────────────────────────────────────────────────────────────────────

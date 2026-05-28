@@ -1,4 +1,4 @@
-module github.com/deadprogram/talkingheads/action
+module github.com/talkingheads2053/talkingheads/action
 
 go 1.24.4
 

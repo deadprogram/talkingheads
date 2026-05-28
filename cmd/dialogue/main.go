@@ -11,7 +11,7 @@ import (
 	"syscall"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/deadprogram/talkingheads/pkg/dialogue"
+	"github.com/talkingheads2053/talkingheads/pkg/dialogue"
 	"github.com/urfave/cli/v2"
 )
 

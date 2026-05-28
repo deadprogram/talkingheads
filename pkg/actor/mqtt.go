@@ -7,9 +7,9 @@ import (
 	"regexp"
 	"sync"
 
-	"github.com/deadprogram/talkingheads/pkg/commands"
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/hybridgroup/yzma/pkg/message"
+	"github.com/talkingheads2053/talkingheads/pkg/commands"
 )
 
 // MQTTListener connects to an MQTT broker and wires up an Actor to receive

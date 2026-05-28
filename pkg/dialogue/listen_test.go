@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/deadprogram/talkingheads/pkg/commands"
 	mqtt "github.com/eclipse/paho.mqtt.golang"
+	"github.com/talkingheads2053/talkingheads/pkg/commands"
 )
 
 // mockToken is a no-op mqtt.Token used by mockMQTTClient.

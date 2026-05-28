@@ -7,8 +7,8 @@ import (
 	"log"
 	"time"
 
-	"github.com/deadprogram/talkingheads/pkg/commands"
 	mqtt "github.com/eclipse/paho.mqtt.golang"
+	"github.com/talkingheads2053/talkingheads/pkg/commands"
 )
 
 // Listener listens for MQTT messages with something that was said, and then tells the appropriate Voice to say it.

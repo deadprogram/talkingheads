@@ -10,7 +10,7 @@ import (
 	"syscall"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/deadprogram/talkingheads/pkg/hotmic"
+	"github.com/talkingheads2053/talkingheads/pkg/hotmic"
 	"github.com/urfave/cli/v2"
 )
 

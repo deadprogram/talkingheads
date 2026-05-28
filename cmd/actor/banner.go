@@ -3,7 +3,7 @@ package main
 import (
 	"strings"
 
-	bannerpkg "github.com/deadprogram/talkingheads/pkg/banner"
+	bannerpkg "github.com/talkingheads2053/talkingheads/pkg/banner"
 )
 
 // makeBanner renders the startup banner using the provided actor name.
