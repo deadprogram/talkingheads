@@ -83,6 +83,10 @@ func New(opts Options) (*HotMic, error) {
 		return nil, err
 	}
 
+	if err := whisper.Init(opts.LibPath); err != nil {
+		return nil, err
+	}
+
 	cparams := whisper.ContextDefaultParams()
 	ctx, err := whisper.InitFromFileWithParams(opts.ModelPath, cparams)
 	if err != nil {
