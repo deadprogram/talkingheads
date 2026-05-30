@@ -36,9 +36,9 @@ func main() {
 // RunCLI runs the CLI command
 func RunCLI(version string) error {
 	app := &cli.App{
-		Name:      "moderator",
-		Usage:     "stop making sense",
-		UsageText: "moderator",
+		Name:      "director",
+		Usage:     "MQTT-based director for managing talking heads actors",
+		UsageText: "director --server mqtt://localhost:1883 --actor llama3000 --actor gemmai [options]",
 		Authors: []*cli.Author{
 			{
 				Name: "deadprogram",

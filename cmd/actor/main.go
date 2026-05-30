@@ -21,7 +21,7 @@ import (
 func main() {
 	app := &cli.App{
 		Name:  "actor",
-		Usage: "have a conversation with an AI actor",
+		Usage: "actor for talking heads",
 		Authors: []*cli.Author{
 			{Name: "deadprogram"},
 		},

@@ -1,4 +1,4 @@
-module github.com/talkingheads2053/talkingheads/cmd/moderator
+module github.com/talkingheads2053/talkingheads/cmd/director
 
 go 1.26.0
 
